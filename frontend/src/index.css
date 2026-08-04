@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+
+/*
+ * Sistema visual "brasa": neutrales cálidos de carbón y ceniza, con el naranja
+ * del fuego reservado para lo que hay que tocar o cobrar. El color nunca es el
+ * único indicador: siempre va acompañado de texto, porque la pantalla se mira
+ * de reojo, con las manos ocupadas y con luz tenue.
+ */
+@theme {
+  --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Neutrales cálidos */
+  --color-fondo: #f7f4f0;
+  --color-superficie: #ffffff;
+  --color-hundido: #efe9e2;
+  --color-borde: #e4dcd2;
+  --color-borde-fuerte: #c6bbad;
+  --color-carbon: #1c1613;
+  --color-tinta: #6b6058;
+
+  /* Brasa: acción, dinero, lo que está en curso */
+  --color-brasa-50: #fff5f0;
+  --color-brasa-100: #ffe6d8;
+  --color-brasa-200: #ffc8a8;
+  --color-brasa-300: #ffa271;
+  --color-brasa-400: #fb7538;
+  --color-brasa-500: #e2571f;
+  --color-brasa-600: #c1440e;
+  --color-brasa-700: #99350b;
+  --color-brasa-800: #7a2c0e;
+
+  /* Hoja: lo que está libre, listo o cobrado */
+  --color-hoja-50: #f1fbf4;
+  --color-hoja-100: #dcf5e4;
+  --color-hoja-600: #1a8a48;
+  --color-hoja-700: #14713a;
+
+  --color-alerta: #b42318;
+  --color-alerta-suave: #fef1f0;
+
+  --radius-app: 0.875rem;
+  --radius-app-lg: 1.25rem;
+
+  /* Sombras teñidas de marrón: sobre fondo cálido, el gris puro se ve sucio. */
+  --shadow-suave: 0 1px 2px rgb(28 22 19 / 0.05), 0 1px 3px rgb(28 22 19 / 0.04);
+  --shadow-media: 0 2px 4px rgb(28 22 19 / 0.04), 0 6px 16px rgb(28 22 19 / 0.08);
+  --shadow-alta: 0 4px 8px rgb(28 22 19 / 0.06), 0 16px 40px rgb(28 22 19 / 0.16);
+  --shadow-brasa: 0 2px 4px rgb(193 68 14 / 0.16), 0 8px 20px rgb(193 68 14 / 0.22);
+
+  --animate-aparecer: aparecer 0.16s ease-out;
+  --animate-desvanecer: desvanecer 0.14s ease-in;
+  --animate-emerger: emerger 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-subir: subir 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-brillo: brillo 1.6s ease-in-out infinite;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes desvanecer {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes emerger {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes subir {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes brillo {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-fondo);
+    color: var(--color-carbon);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  a {
+    touch-action: manipulation;
+  }
+
+  /* Un solo anillo de foco en toda la app, visible sobre cualquier fondo.
+     Sin tocar el border-radius: el outline ya sigue la forma del elemento. */
+  :focus-visible {
+    outline: 3px solid var(--color-brasa-500);
+    outline-offset: 2px;
+  }
+
+  /* Los montos se leen en columna: cifras de ancho fijo evitan que "bailen". */
+  .monto {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* Los títulos apretados se ven más deliberados que los sueltos. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
