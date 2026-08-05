@@ -11,7 +11,7 @@ import { calcularPrecioCombo, diferenciaDeSustitucion } from '@/hooks/useCalculo
 import { formatoMoneda } from '@/utils/formatoMoneda'
 import { TIPO_ITEM } from '@/utils/constantes'
 
-export function ArmadorCombo({ abierto, onOpenChange, onAgregar, guardando }) {
+export function ArmadorCombo({ abierto, onOpenChange, onAgregar, guardando, comboInicial = null }) {
   const { combos, anticuchos, cargando } = useCatalogo()
   const [combo, setCombo] = useState(null)
   const [sustituciones, setSustituciones] = useState({})
@@ -22,8 +22,14 @@ export function ArmadorCombo({ abierto, onOpenChange, onAgregar, guardando }) {
       setCombo(null)
       setSustituciones({})
       setSlotEnEdicion(null)
+      return
     }
-  }, [abierto])
+    if (comboInicial) {
+      setCombo(comboInicial)
+      setSustituciones({})
+      setSlotEnEdicion(null)
+    }
+  }, [abierto, comboInicial])
 
   const total = calcularPrecioCombo(combo, sustituciones)
 

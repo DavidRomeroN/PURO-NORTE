@@ -8,11 +8,15 @@ import com.anticucheria.model.enums.EstadoPedido;
 
 import java.util.List;
 
+
 public interface PedidoService {
 
     PedidoResponse crear(CrearPedidoRequest request, String username);
 
     PedidoResponse agregarItem(Long pedidoId, AgregarItemRequest request);
+
+    /** Crea varios ítems en una sola transacción y emite un solo evento de tiempo real. */
+    PedidoResponse agregarItemsLote(Long pedidoId, List<AgregarItemRequest> items);
 
     PedidoResponse eliminarItem(Long pedidoId, Long itemId);
 

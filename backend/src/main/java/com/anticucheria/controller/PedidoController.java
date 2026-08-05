@@ -1,6 +1,7 @@
 package com.anticucheria.controller;
 
 import com.anticucheria.dto.request.AgregarItemRequest;
+import com.anticucheria.dto.request.AgregarItemsLoteRequest;
 import com.anticucheria.dto.request.AnularPedidoRequest;
 import com.anticucheria.dto.request.CambiarMesaRequest;
 import com.anticucheria.dto.request.CrearPedidoRequest;
@@ -92,6 +93,14 @@ public class PedidoController {
     @ResponseStatus(HttpStatus.CREATED)
     public PedidoResponse agregarItem(@PathVariable Long id, @Valid @RequestBody AgregarItemRequest request) {
         return pedidoService.agregarItem(id, request);
+    }
+
+    @PostMapping("/{id}/items/lote")
+    @PreAuthorize("hasAnyRole('MOZO','CAJA','ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PedidoResponse agregarItemsLote(@PathVariable Long id,
+                                           @Valid @RequestBody AgregarItemsLoteRequest request) {
+        return pedidoService.agregarItemsLote(id, request.getItems());
     }
 
     @DeleteMapping("/{id}/items/{itemId}")

@@ -11,6 +11,8 @@ public interface BoletaRepository extends JpaRepository<Boleta, Long> {
 
     boolean existsByPedidoId(Long pedidoId);
 
+    java.util.Optional<Boleta> findByTokenPublico(String tokenPublico);
+
     List<Boleta> findAllByOrderByEmitidoEnDesc();
 
     List<Boleta> findByEstadoSunatOrderByEmitidoEnDesc(EstadoSunat estadoSunat);

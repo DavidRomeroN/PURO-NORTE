@@ -2,6 +2,7 @@ import { ChevronLeft, LogOut } from 'lucide-react'
 import { BottomNav } from './BottomNav'
 import { SidebarNav } from './SidebarNav'
 import { useAuth } from '@/hooks/useAuth'
+import { useRealtime } from '@/realtime/RealtimeContext'
 import { cn } from '@/utils/cn'
 
 const ANCHOS = {
@@ -27,6 +28,7 @@ export function AppShell({
   children,
 }) {
   const { logout, usuario } = useAuth()
+  const { conectado } = useRealtime()
   const contenedor = cn('mx-auto w-full px-4 sm:px-6', ANCHOS[ancho])
 
   // El nav inferior desaparece en escritorio; la barra de total no, y sigue tapando.
@@ -51,9 +53,19 @@ export function AppShell({
             ) : null}
 
             <div className="min-w-0 grow">
-              <h1 className="truncate text-2xl font-extrabold leading-tight text-carbon sm:text-3xl">
-                {titulo}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-2xl font-extrabold leading-tight text-carbon sm:text-3xl">
+                  {titulo}
+                </h1>
+                <span
+                  title={conectado ? 'En vivo' : 'Sin tiempo real'}
+                  aria-label={conectado ? 'Conectado en vivo' : 'Sin tiempo real'}
+                  className={cn(
+                    'size-2.5 shrink-0 rounded-full',
+                    conectado ? 'bg-hoja-500' : 'bg-tinta/40',
+                  )}
+                />
+              </div>
               {subtitulo ? (
                 <p className="truncate text-sm font-medium text-tinta sm:text-base">{subtitulo}</p>
               ) : null}

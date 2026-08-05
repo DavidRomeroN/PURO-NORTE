@@ -17,7 +17,7 @@ export function useMesas() {
   const activos = useQuery({
     queryKey: ['pedidos', 'activos'],
     queryFn: pedidosApi.listarActivos,
-    refetchInterval: 10_000,
+    refetchInterval: 60_000,
   })
 
   const pedidos = activos.data ?? []

@@ -9,10 +9,7 @@ import { EstadoCarga } from '@/components/common/EstadoCarga'
 import { EstadoVacio } from '@/components/common/EstadoVacio'
 import { EditarPrecioDialog } from '@/components/common/EditarPrecioDialog'
 import { ListaItemsPedido } from './ListaItemsPedido'
-import { SelectorTipoItem } from './SelectorTipoItem'
-import { ArmadorAnticucho } from './ArmadorAnticucho'
-import { ArmadorCombo } from './ArmadorCombo'
-import { SelectorSimple } from './SelectorSimple'
+import { TomaPedidoVista } from './TomaPedidoVista'
 import { GestionMesasSheet } from './GestionMesasSheet'
 import { AnularCuentaDialog } from './AnularCuentaDialog'
 import { useAccionesPedido, usePedido, usePedidoDeMesa } from '@/hooks/usePedido'
@@ -21,7 +18,6 @@ import { useAuth } from '@/hooks/useAuth'
 import { mensajeDeError } from '@/api/axiosClient'
 import { horaCorta } from '@/utils/fechas'
 import { nombrePedido } from '@/utils/etiquetas'
-import { TIPO_ITEM } from '@/utils/constantes'
 
 export function PedidoPage({ paraLlevar = false }) {
   const { mesaId, pedidoId } = useParams()
@@ -29,7 +25,6 @@ export function PedidoPage({ paraLlevar = false }) {
   const { puedeCobrar } = useAuth()
   const { mesas, libres: mesasLibres } = useMesas()
 
-  // Para llevar se entra por /llevar/nuevo y la URL recién toma el id al guardar el primer plato.
   const idExistente = paraLlevar && pedidoId !== 'nuevo' ? pedidoId : null
   const deLlevar = usePedido(idExistente)
   const deMesa = usePedidoDeMesa(paraLlevar ? null : mesaId)
@@ -39,7 +34,7 @@ export function PedidoPage({ paraLlevar = false }) {
 
   const {
     crearPedido,
-    agregarItem,
+    agregarItemsLote,
     quitarItem,
     editarPrecio,
     anularPedido,
@@ -48,21 +43,16 @@ export function PedidoPage({ paraLlevar = false }) {
     separarMesa,
   } = useAccionesPedido()
 
-  const [selectorAbierto, setSelectorAbierto] = useState(false)
-  const [armador, setArmador] = useState(null)
+  const [tomaAbierta, setTomaAbierta] = useState(false)
   const [itemEnEdicion, setItemEnEdicion] = useState(null)
   const [gestionandoMesas, setGestionandoMesas] = useState(false)
   const [anulando, setAnulando] = useState(false)
 
   const mesa = mesas.find((m) => m.id === Number(mesaId))
   const items = pedido?.items ?? []
-  const guardando = crearPedido.isPending || agregarItem.isPending
+  const enviando = crearPedido.isPending || agregarItemsLote.isPending
 
-  /**
-   * El pedido se crea recién con el primer ítem. Así, entrar a una mesa por
-   * curiosidad y salir no la deja ocupada con una cuenta vacía.
-   */
-  async function guardarItems(nuevos) {
+  async function enviarCanasta(nuevos) {
     try {
       let id = pedido?.id
       if (!id) {
@@ -70,13 +60,11 @@ export function PedidoPage({ paraLlevar = false }) {
         id = creado.id
         if (paraLlevar) navigate(`/llevar/${id}`, { replace: true })
       }
-      for (const item of nuevos) {
-        await agregarItem.mutateAsync({ pedidoId: id, item })
-      }
-      setArmador(null)
+      await agregarItemsLote.mutateAsync({ pedidoId: id, items: nuevos })
       toast.success('Agregado al pedido')
     } catch (error) {
       toast.error(mensajeDeError(error))
+      throw error
     }
   }
 
@@ -115,10 +103,9 @@ export function PedidoPage({ paraLlevar = false }) {
     }
   }
 
-  /** Cambia una mesa de la cuenta y avisa el resultado en las palabras del salón. */
-  async function cambiarMesas(mutacion, mesaId, mensaje) {
+  async function cambiarMesas(mutacion, mesaDestinoId, mensaje) {
     try {
-      await mutacion.mutateAsync({ pedidoId: pedido.id, mesaId })
+      await mutacion.mutateAsync({ pedidoId: pedido.id, mesaId: mesaDestinoId })
       setGestionandoMesas(false)
       toast.success(mensaje)
       return true
@@ -174,7 +161,7 @@ export function PedidoPage({ paraLlevar = false }) {
                 }
                 descripcion="Agrega el primer plato para abrir la cuenta."
                 accion="+ Agregar"
-                onAccion={() => setSelectorAbierto(true)}
+                onAccion={() => setTomaAbierta(true)}
               />
             ) : (
               <>
@@ -184,12 +171,11 @@ export function PedidoPage({ paraLlevar = false }) {
                   onEditarPrecio={setItemEnEdicion}
                   quitando={quitarItem.isPending}
                 />
-                <Button tamano="grande" className="w-full" onClick={() => setSelectorAbierto(true)}>
+                <Button tamano="grande" className="w-full" onClick={() => setTomaAbierta(true)}>
                   <Plus size={24} />
                   Agregar
                 </Button>
 
-                {/* Los grupos juntan mesas o se cambian de sitio a mitad de la noche. */}
                 {!paraLlevar ? (
                   <Button
                     variante="secundaria"
@@ -204,10 +190,6 @@ export function PedidoPage({ paraLlevar = false }) {
               </>
             )}
 
-            {/*
-              También cuando la cuenta quedó sin ítems: quitarlos todos no libera la mesa,
-              y sin esto una mesa abierta por error se pierde hasta que alguien la cobre.
-            */}
             {pedido ? (
               <Button
                 variante="destructiva"
@@ -223,35 +205,11 @@ export function PedidoPage({ paraLlevar = false }) {
         )}
       </AppShell>
 
-      <SelectorTipoItem
-        abierto={selectorAbierto}
-        onOpenChange={setSelectorAbierto}
-        onElegir={(tipo) => {
-          setSelectorAbierto(false)
-          setArmador(tipo)
-        }}
-      />
-
-      <ArmadorAnticucho
-        abierto={armador === TIPO_ITEM.ANTICUCHO}
-        onOpenChange={(valor) => !valor && setArmador(null)}
-        onAgregar={guardarItems}
-        guardando={guardando}
-      />
-
-      <ArmadorCombo
-        abierto={armador === TIPO_ITEM.COMBO}
-        onOpenChange={(valor) => !valor && setArmador(null)}
-        onAgregar={guardarItems}
-        guardando={guardando}
-      />
-
-      <SelectorSimple
-        abierto={armador === TIPO_ITEM.BEBIDA || armador === TIPO_ITEM.EXTRA}
-        tipo={armador === TIPO_ITEM.EXTRA ? TIPO_ITEM.EXTRA : TIPO_ITEM.BEBIDA}
-        onOpenChange={(valor) => !valor && setArmador(null)}
-        onAgregar={guardarItems}
-        guardando={guardando}
+      <TomaPedidoVista
+        abierto={tomaAbierta}
+        onOpenChange={setTomaAbierta}
+        onEnviar={enviarCanasta}
+        enviando={enviando}
       />
 
       <EditarPrecioDialog
@@ -275,18 +233,17 @@ export function PedidoPage({ paraLlevar = false }) {
         pedido={pedido}
         mesasLibres={mesasLibres}
         guardando={moverAMesa.isPending || unirMesa.isPending || separarMesa.isPending}
-        onMover={async (mesaId) => {
-          const numero = mesasLibres.find((m) => m.id === mesaId)?.numero
-          // La mesa de la URL dejó de ser la de la cuenta, así que hay que seguirla.
-          if (await cambiarMesas(moverAMesa, mesaId, `La cuenta pasó a la mesa ${numero}`)) {
-            navigate(`/pedido/${mesaId}`, { replace: true })
+        onMover={async (id) => {
+          const numero = mesasLibres.find((m) => m.id === id)?.numero
+          if (await cambiarMesas(moverAMesa, id, `La cuenta pasó a la mesa ${numero}`)) {
+            navigate(`/pedido/${id}`, { replace: true })
           }
         }}
-        onUnir={(mesaId) => {
-          const numero = mesasLibres.find((m) => m.id === mesaId)?.numero
-          cambiarMesas(unirMesa, mesaId, `Mesa ${numero} unida a esta cuenta`)
+        onUnir={(id) => {
+          const numero = mesasLibres.find((m) => m.id === id)?.numero
+          cambiarMesas(unirMesa, id, `Mesa ${numero} unida a esta cuenta`)
         }}
-        onSeparar={(mesaId) => cambiarMesas(separarMesa, mesaId, 'Mesa separada')}
+        onSeparar={(id) => cambiarMesas(separarMesa, id, 'Mesa separada')}
       />
     </>
   )

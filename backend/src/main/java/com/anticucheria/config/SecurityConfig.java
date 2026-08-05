@@ -40,7 +40,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Solo el login es público. /me exige token (antes caía en permitAll).
                         .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/publico/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        // Handshake SockJS; el JWT se exige en el CONNECT STOMP.
+                        .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class)

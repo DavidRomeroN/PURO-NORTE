@@ -31,6 +31,9 @@ public class BoletaResponse {
     private boolean simulada;
     /** Si existe un PDF que se le pueda dar al cliente. */
     private boolean descargable;
+    /** Enlace público (sin JWT) al PDF, solo si SUNAT aceptó. */
+    private String urlPublicaPdf;
+    private String tokenPublico;
     private LocalDateTime emitidoEn;
     private List<BoletaDetalleResponse> detalles;
 }

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/context/AuthContext'
+import { RealtimeProvider } from '@/realtime/RealtimeContext'
 import { RutaProtegida } from '@/components/common/RutaProtegida'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { MesasPage } from '@/features/mesas/MesasPage'
@@ -36,6 +37,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
+          <RealtimeProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
@@ -155,6 +157,7 @@ export default function App() {
               },
             }}
           />
+          </RealtimeProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

@@ -22,6 +22,7 @@ import com.anticucheria.repository.MesaRepository;
 import com.anticucheria.repository.PedidoItemRepository;
 import com.anticucheria.repository.PedidoRepository;
 import com.anticucheria.repository.UsuarioRepository;
+import com.anticucheria.realtime.RealtimePublisher;
 import com.anticucheria.service.BoletaService;
 import com.anticucheria.service.FactuSmartClientService;
 import com.anticucheria.service.factusmart.ArchivoComprobante;
@@ -32,6 +33,7 @@ import com.anticucheria.service.factusmart.ItemFiscal;
 import com.anticucheria.service.factusmart.TipoArchivo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +43,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 @Service
@@ -55,6 +58,10 @@ public class BoletaServiceImpl implements BoletaService {
     private final MesaRepository mesaRepository;
     private final FactuSmartClientService factuSmartClientService;
     private final InterruptorDeEmision interruptor;
+    private final RealtimePublisher realtimePublisher;
+
+    @Value("${app.public-url:http://localhost:8080}")
+    private String publicUrl;
 
     @Override
     @Transactional
@@ -106,6 +113,11 @@ public class BoletaServiceImpl implements BoletaService {
         pedidoRepository.save(pedido);
 
         liberarMesas(pedido);
+        asegurarTokenPublico(guardada);
+        boletaRepository.save(guardada);
+
+        // Libera mesas en todas las pantallas (bug: mesas no se actualizaban al cobrar).
+        realtimePublisher.mesas();
 
         return toResponse(guardada);
     }
@@ -163,6 +175,7 @@ public class BoletaServiceImpl implements BoletaService {
             enviar(boleta, () -> factuSmartClientService.emitir(boleta, items));
         }
 
+        asegurarTokenPublico(boleta);
         return toResponse(boletaRepository.save(boleta));
     }
 
@@ -179,8 +192,27 @@ public class BoletaServiceImpl implements BoletaService {
         if (antes != boleta.getEstadoSunat()) {
             log.info("Boleta {}: SUNAT la paso de {} a {}", id, antes, boleta.getEstadoSunat());
         }
+        asegurarTokenPublico(boleta);
 
         return toResponse(boletaRepository.save(boleta));
+    }
+
+    @Override
+    @Transactional
+    public BoletaResponse marcarEnviadaWhatsapp(Long id) {
+        Boleta boleta = buscar(id);
+        boleta.setEnviadaWhatsapp(true);
+        boleta.setEnviadaEn(LocalDateTime.now());
+        return toResponse(boletaRepository.save(boleta));
+    }
+
+    @Override
+    @Transactional
+    public void marcarEnviadaCorreo(Long id) {
+        Boleta boleta = buscar(id);
+        boleta.setEnviadaCorreo(true);
+        boleta.setEnviadaEn(LocalDateTime.now());
+        boletaRepository.save(boleta);
     }
 
     // Sin transaccion: bajar un PDF puede tardar y no tiene sentido retener una conexion
@@ -300,7 +332,21 @@ public class BoletaServiceImpl implements BoletaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Boleta no encontrada: " + id));
     }
 
+    private void asegurarTokenPublico(Boleta boleta) {
+        if (boleta.getEstadoSunat() == EstadoSunat.ACEPTADO
+                && !boleta.isSimulada()
+                && (boleta.getTokenPublico() == null || boleta.getTokenPublico().isBlank())) {
+            boleta.setTokenPublico(UUID.randomUUID().toString().replace("-", ""));
+        }
+    }
+
     private BoletaResponse toResponse(Boleta boleta) {
+        boolean aceptada = boleta.getEstadoSunat() == EstadoSunat.ACEPTADO && !boleta.isSimulada();
+        String urlPublica = null;
+        if (aceptada && boleta.getTokenPublico() != null) {
+            String base = publicUrl.endsWith("/") ? publicUrl.substring(0, publicUrl.length() - 1) : publicUrl;
+            urlPublica = base + "/api/publico/boletas/" + boleta.getTokenPublico() + "/pdf";
+        }
         return BoletaResponse.builder()
                 .id(boleta.getId())
                 .pedidoId(boleta.getPedido().getId())
@@ -320,7 +366,9 @@ public class BoletaServiceImpl implements BoletaService {
                 .simulada(boleta.isSimulada())
                 // Una boleta simulada figura aceptada pero no existe ningun archivo, asi
                 // que la interfaz no debe ofrecer el PDF.
-                .descargable(boleta.getEstadoSunat() == EstadoSunat.ACEPTADO && !boleta.isSimulada())
+                .descargable(aceptada)
+                .urlPublicaPdf(urlPublica)
+                .tokenPublico(boleta.getTokenPublico())
                 .emitidoEn(boleta.getEmitidoEn())
                 .detalles(boleta.getDetalles().stream().map(detalle -> BoletaDetalleResponse.builder()
                         .descripcion(detalle.getDescripcion())

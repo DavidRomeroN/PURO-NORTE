@@ -25,7 +25,8 @@ export function useParrilla() {
   return useQuery({
     queryKey: ['pedidos', 'parrilla'],
     queryFn: pedidosApi.listarParrilla,
-    refetchInterval: 5_000,
+    // Respaldo si el WebSocket se cae; con socket activo el invalidate llega antes.
+    refetchInterval: 60_000,
   })
 }
 
@@ -68,6 +69,11 @@ export function useAccionesPedido() {
 
   const agregarItem = useMutation({
     mutationFn: ({ pedidoId, item }) => pedidosApi.agregarItem(pedidoId, item),
+    onSuccess: refrescar,
+  })
+
+  const agregarItemsLote = useMutation({
+    mutationFn: ({ pedidoId, items }) => pedidosApi.agregarItemsLote(pedidoId, items),
     onSuccess: refrescar,
   })
 
@@ -127,6 +133,7 @@ export function useAccionesPedido() {
   return {
     crearPedido,
     agregarItem,
+    agregarItemsLote,
     quitarItem,
     editarPrecio,
     cerrarPedido,

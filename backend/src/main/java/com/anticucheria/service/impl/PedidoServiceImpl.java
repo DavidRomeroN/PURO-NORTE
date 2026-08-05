@@ -29,6 +29,7 @@ import com.anticucheria.repository.PedidoItemRepository;
 import com.anticucheria.repository.PedidoRepository;
 import com.anticucheria.repository.ProductoBaseRepository;
 import com.anticucheria.repository.UsuarioRepository;
+import com.anticucheria.realtime.RealtimePublisher;
 import com.anticucheria.service.PedidoService;
 import com.anticucheria.service.PrecioEngineService;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,7 @@ public class PedidoServiceImpl implements PedidoService {
     private final ComboRepository comboRepository;
     private final ComboSlotRepository comboSlotRepository;
     private final PrecioEngineService precioEngineService;
+    private final RealtimePublisher realtimePublisher;
 
     @Override
     @Transactional
@@ -66,7 +68,7 @@ public class PedidoServiceImpl implements PedidoService {
         Usuario mozo = buscarUsuario(username);
 
         if (request.getMesaId() == null) {
-            return toResponse(crearParaLlevar(mozo));
+            return publicar(toResponse(crearParaLlevar(mozo)), false, false);
         }
 
         Mesa mesa = buscarMesa(request.getMesaId());
@@ -82,7 +84,7 @@ public class PedidoServiceImpl implements PedidoService {
 
         ocupar(mesa);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), false, true);
     }
 
     private Pedido crearParaLlevar(Usuario mozo) {
@@ -126,7 +128,46 @@ public class PedidoServiceImpl implements PedidoService {
         }
 
         pedidoItemRepository.save(item);
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), afectaParrilla(request.getTipoItem()), false);
+    }
+
+    @Override
+    @Transactional
+    public PedidoResponse agregarItemsLote(Long pedidoId, List<AgregarItemRequest> items) {
+        Pedido pedido = buscarPedido(pedidoId);
+        if (pedido.getEstado() != EstadoPedido.ABIERTO) {
+            throw new ReglaNegocioException("Solo se pueden agregar ítems a pedidos abiertos");
+        }
+        if (items == null || items.isEmpty()) {
+            throw new ReglaNegocioException("El lote no puede estar vacío");
+        }
+
+        boolean cocina = false;
+        for (AgregarItemRequest request : items) {
+            BigDecimal precioUnitario = calcularPrecio(request);
+            PedidoItem item = PedidoItem.builder()
+                    .pedido(pedido)
+                    .tipoItem(request.getTipoItem())
+                    .cantidad(request.getCantidad())
+                    .precioCalculado(precioUnitario)
+                    .precioFinal(precioUnitario)
+                    .paraLlevar(Boolean.TRUE.equals(request.getParaLlevar()))
+                    .observaciones(request.getObservaciones())
+                    .build();
+
+            if (request.getTipoItem() == TipoItem.COMBO) {
+                Combo combo = comboRepository.findById(request.getComboId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Combo no encontrado: " + request.getComboId()));
+                item.setCombo(combo);
+                item.getComponentes().addAll(componentesDeCombo(item, combo.getId(), request.getSustituciones()));
+            } else {
+                item.getComponentes().addAll(componentesSueltos(item, request.getComponentes()));
+            }
+            pedidoItemRepository.save(item);
+            cocina = cocina || afectaParrilla(request.getTipoItem());
+        }
+
+        return publicar(toResponse(pedido), cocina, false);
     }
 
     @Override
@@ -138,9 +179,10 @@ public class PedidoServiceImpl implements PedidoService {
         }
 
         PedidoItem item = buscarItem(pedidoId, itemId);
+        boolean cocina = afectaParrilla(item.getTipoItem());
         pedidoItemRepository.delete(item);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), cocina, false);
     }
 
     @Override
@@ -159,7 +201,7 @@ public class PedidoServiceImpl implements PedidoService {
         item.setMotivoEdicion(request.getMotivo());
         pedidoItemRepository.save(item);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), false, false);
     }
 
     @Override
@@ -177,7 +219,7 @@ public class PedidoServiceImpl implements PedidoService {
         pedido.setCerradoEn(LocalDateTime.now());
         pedidoRepository.save(pedido);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), true, false);
     }
 
     @Override
@@ -212,7 +254,7 @@ public class PedidoServiceImpl implements PedidoService {
                     pedidoId, username, total, motivo);
         }
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), true, true);
     }
 
     @Override
@@ -243,7 +285,7 @@ public class PedidoServiceImpl implements PedidoService {
         ocupar(destino);
         pedidoRepository.save(pedido);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), true, true);
     }
 
     @Override
@@ -262,7 +304,7 @@ public class PedidoServiceImpl implements PedidoService {
         ocupar(nueva);
         pedidoRepository.save(pedido);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), true, true);
     }
 
     @Override
@@ -281,7 +323,7 @@ public class PedidoServiceImpl implements PedidoService {
         liberar(unida);
         pedidoRepository.save(pedido);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), true, true);
     }
 
     @Override
@@ -329,7 +371,7 @@ public class PedidoServiceImpl implements PedidoService {
         }
         pedidoItemRepository.save(item);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), true, false);
     }
 
     @Override
@@ -347,7 +389,16 @@ public class PedidoServiceImpl implements PedidoService {
         }
         pedidoItemRepository.saveAll(items);
 
-        return toResponse(pedido);
+        return publicar(toResponse(pedido), true, false);
+    }
+
+    private PedidoResponse publicar(PedidoResponse response, boolean parrilla, boolean mesas) {
+        realtimePublisher.pedido(response, parrilla, mesas);
+        return response;
+    }
+
+    private static boolean afectaParrilla(TipoItem tipo) {
+        return tipo == TipoItem.ANTICUCHO || tipo == TipoItem.COMBO;
     }
 
     /**

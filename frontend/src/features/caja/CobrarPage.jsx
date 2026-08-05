@@ -21,6 +21,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { EditarPrecioDialog } from '@/components/common/EditarPrecioDialog'
 import { ListaItemsPedido } from '@/features/pedido/ListaItemsPedido'
 import { AnularCuentaDialog } from '@/features/pedido/AnularCuentaDialog'
+import { EnviarBoletaDialog } from '@/features/caja/EnviarBoletaDialog'
 import { boletasApi, MONTO_QUE_EXIGE_DNI } from '@/api/boletasApi'
 import { ESTADO_CONSULTA } from '@/api/clientesApi'
 import { mensajeDeError } from '@/api/axiosClient'
@@ -50,6 +51,7 @@ export function CobrarPage() {
   const [medioPago, setMedioPago] = useState(MEDIOS_PAGO[0].valor)
   const [dni, setDni] = useState('')
   const [boleta, setBoleta] = useState(null)
+  const [enviarAbierto, setEnviarAbierto] = useState(false)
 
   const generarBoleta = useMutation({
     mutationFn: () =>
@@ -188,6 +190,27 @@ export function CobrarPage() {
             </Button>
           ) : null}
 
+          {aceptada && boleta.urlPublicaPdf ? (
+            <Button
+              tamano="grande"
+              variante="secundaria"
+              className="w-full"
+              onClick={() => setEnviarAbierto(true)}
+            >
+              ENVIAR AL CLIENTE
+            </Button>
+          ) : !aceptada && !rechazada && !simulada ? (
+            <p className="text-sm text-tinta">
+              Podrás enviarla cuando SUNAT la confirme
+            </p>
+          ) : null}
+
+          <EnviarBoletaDialog
+            abierto={enviarAbierto}
+            onClose={() => setEnviarAbierto(false)}
+            boleta={boleta}
+          />
+
           {/* SUNAT tarda en confirmar y casi siempre se resuelve sola. No es un error. */}
           {!aceptada && !rechazada && !simulada ? (
             <div className="w-full rounded-app border-2 border-brasa-200 bg-brasa-50 p-4 text-left">
@@ -239,9 +262,9 @@ export function CobrarPage() {
             variante={aceptada ? 'secundaria' : 'principal'}
             tamano="grande"
             className="mt-2 w-full"
-            onClick={() => navigate('/caja')}
+            onClick={() => navigate('/mesas')}
           >
-            Volver a Caja
+            Volver a mesas
           </Button>
         </Card>
       </AppShell>

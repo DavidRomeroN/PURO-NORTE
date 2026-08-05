@@ -44,6 +44,11 @@ export const pedidosApi = {
     return data
   },
 
+  async agregarItemsLote(pedidoId, items) {
+    const { data } = await axiosClient.post(`/pedidos/${pedidoId}/items/lote`, { items })
+    return data
+  },
+
   async quitarItem(pedidoId, itemId) {
     const { data } = await axiosClient.delete(`/pedidos/${pedidoId}/items/${itemId}`)
     return data

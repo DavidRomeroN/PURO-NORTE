@@ -79,4 +79,13 @@ export const boletasApi = {
     const { data } = await axiosClient.post('/boletas/reactivar-emision')
     return data
   },
+
+  async enviarCorreo(id, correo) {
+    await axiosClient.post(`/boletas/${id}/enviar-correo`, { correo })
+  },
+
+  async marcarWhatsapp(id) {
+    const { data } = await axiosClient.post(`/boletas/${id}/marcar-whatsapp`)
+    return data
+  },
 }

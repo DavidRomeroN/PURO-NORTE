@@ -1,10 +1,12 @@
 package com.anticucheria.controller;
 
+import com.anticucheria.dto.request.EnviarCorreoBoletaRequest;
 import com.anticucheria.dto.request.GenerarBoletaRequest;
 import com.anticucheria.dto.response.BoletaResponse;
 import com.anticucheria.dto.response.CreditosResponse;
 import com.anticucheria.model.enums.EstadoSunat;
 import com.anticucheria.service.BoletaService;
+import com.anticucheria.service.CorreoBoletaService;
 import com.anticucheria.service.factusmart.ArchivoComprobante;
 import com.anticucheria.service.factusmart.TipoArchivo;
 import jakarta.validation.Valid;
@@ -36,6 +38,7 @@ import java.util.List;
 public class BoletaController {
 
     private final BoletaService boletaService;
+    private final CorreoBoletaService correoBoletaService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('CAJA','ADMIN')")
@@ -84,6 +87,19 @@ public class BoletaController {
     @PreAuthorize("hasAnyRole('CAJA','ADMIN')")
     public BoletaResponse sincronizar(@PathVariable Long id) {
         return boletaService.sincronizar(id);
+    }
+
+    @PostMapping("/{id}/enviar-correo")
+    @PreAuthorize("hasAnyRole('CAJA','ADMIN')")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarCorreo(@PathVariable Long id, @Valid @RequestBody EnviarCorreoBoletaRequest request) {
+        correoBoletaService.enviarAsync(id, request.getCorreo().trim());
+    }
+
+    @PostMapping("/{id}/marcar-whatsapp")
+    @PreAuthorize("hasAnyRole('CAJA','ADMIN')")
+    public BoletaResponse marcarWhatsapp(@PathVariable Long id) {
+        return boletaService.marcarEnviadaWhatsapp(id);
     }
 
     /** Lo unico que se necesita en el 99% de los casos: es lo que se le da al cliente. */

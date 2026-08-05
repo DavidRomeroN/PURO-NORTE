@@ -99,6 +99,21 @@ public class Boleta {
     @Builder.Default
     private LocalDateTime emitidoEn = LocalDateTime.now();
 
+    /** UUID para descarga pública del PDF sin JWT. Solo se usa si SUNAT aceptó. */
+    @Column(name = "token_publico", length = 64, unique = true)
+    private String tokenPublico;
+
+    @Column(name = "enviada_whatsapp", nullable = false)
+    @Builder.Default
+    private boolean enviadaWhatsapp = false;
+
+    @Column(name = "enviada_correo", nullable = false)
+    @Builder.Default
+    private boolean enviadaCorreo = false;
+
+    @Column(name = "enviada_en")
+    private LocalDateTime enviadaEn;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cajero_id", nullable = false)
     private Usuario cajero;

@@ -30,4 +30,8 @@ public interface BoletaService {
 
     /** Reactiva la emision despues de corregir la configuracion del RUC. */
     void reactivarEmision();
+
+    BoletaResponse marcarEnviadaWhatsapp(Long id);
+
+    void marcarEnviadaCorreo(Long id);
 }

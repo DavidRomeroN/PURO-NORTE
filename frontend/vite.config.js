@@ -18,6 +18,7 @@ export default defineConfig({
     // salen por el mismo origen y no hay que tocar el CORS del backend.
     proxy: {
       '/api': { target: 'http://localhost:8080', changeOrigin: true },
+      '/ws': { target: 'http://localhost:8080', changeOrigin: true, ws: true },
     },
   },
 })

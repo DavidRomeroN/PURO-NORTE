@@ -21,7 +21,7 @@ export function CajaPage() {
   const { data, isPending } = useQuery({
     queryKey: ['pedidos', 'todos'],
     queryFn: () => pedidosApi.listar(),
-    refetchInterval: 10_000,
+    refetchInterval: 60_000,
   })
 
   // Pagado y anulado ya no se cobran. Lo que la parrilla ya pasó va primero: es lo

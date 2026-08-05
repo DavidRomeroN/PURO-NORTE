@@ -7,13 +7,30 @@ import { Button } from '@/components/ui/button'
 import { CardBoton } from '@/components/ui/card'
 import { EstadoCarga } from '@/components/common/EstadoCarga'
 import { EstadoVacio } from '@/components/common/EstadoVacio'
+import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { mensajeDeError } from '@/api/axiosClient'
 import { useAccionesPedido, useParrilla } from '@/hooks/usePedido'
 import { useAuth } from '@/hooks/useAuth'
-import { detalleItem, etiquetaItem, nombrePedido } from '@/utils/etiquetas'
+import { nombrePedido } from '@/utils/etiquetas'
+import { agruparItems } from '@/utils/agruparItems'
 import { horaCorta } from '@/utils/fechas'
-import { ESTADO_DESPACHO } from '@/utils/constantes'
+import { ESTADO_DESPACHO, TIPO_ITEM } from '@/utils/constantes'
 import { cn } from '@/utils/cn'
+
+const ALERTA_MINUTOS = Number(import.meta.env.VITE_PARRILLA_ALERTA_MINUTOS ?? 15)
+
+function itemsCocina(pedido) {
+  return (pedido.items ?? []).filter(
+    (item) => item.tipoItem === TIPO_ITEM.ANTICUCHO || item.tipoItem === TIPO_ITEM.COMBO,
+  )
+}
+
+function minutosDesde(fechaIso) {
+  if (!fechaIso) return 0
+  const fecha = new Date(fechaIso)
+  if (Number.isNaN(fecha.getTime())) return 0
+  return Math.max(0, Math.floor((Date.now() - fecha.getTime()) / 60_000))
+}
 
 /**
  * Pantalla del parrillero. Pensada para tablet a distancia: tipografía grande,
@@ -32,6 +49,7 @@ export function ParrillaPage() {
   const { marcarDespacho, despacharTodo } = useAccionesPedido()
   const [pedidoId, setPedidoId] = useState(null)
   const [mostrarListos, setMostrarListos] = useState(false)
+  const [confirmarDespacho, setConfirmarDespacho] = useState(false)
 
   const pendientes = useMemo(
     () => pedidos.filter((pedido) => (pedido.pendientesDespacho ?? 0) > 0),
@@ -71,7 +89,7 @@ export function ParrillaPage() {
           ? 'Todo pasado. Ya puedes cobrarlo en Caja.'
           : 'Todo el pedido marcado como pasado',
       )
-      // Queda en "Ya pasaron": el parrillero sigue la lista; caja ve el aviso verde.
+      setConfirmarDespacho(false)
       setMostrarListos(true)
       setPedidoId(null)
     } catch (error) {
@@ -81,15 +99,26 @@ export function ParrillaPage() {
 
   if (pedido) {
     return (
-      <DetallePedido
-        pedido={pedido}
-        onVolver={() => setPedidoId(null)}
-        onPasarItem={pasarItem}
-        onPasarTodo={pasarTodo}
-        pasando={marcarDespacho.isPending || despacharTodo.isPending}
-        puedeCobrar={puedeCobrar}
-        onCobrar={() => navigate(`/cobrar/${pedido.id}`)}
-      />
+      <>
+        <DetallePedido
+          pedido={pedido}
+          onVolver={() => setPedidoId(null)}
+          onPasarItem={pasarItem}
+          onPasarTodo={() => setConfirmarDespacho(true)}
+          pasando={marcarDespacho.isPending || despacharTodo.isPending}
+          puedeCobrar={puedeCobrar}
+          onCobrar={() => navigate(`/cobrar/${pedido.id}`)}
+        />
+        <ConfirmDialog
+          abierto={confirmarDespacho}
+          onOpenChange={setConfirmarDespacho}
+          titulo="¿Marcar DESPACHADO?"
+          descripcion="Se marcarán todos los platos de cocina de esta tanda."
+          textoConfirmar="DESPACHADO"
+          onConfirmar={pasarTodo}
+          enProceso={despacharTodo.isPending}
+        />
+      </>
     )
   }
 
@@ -170,16 +199,21 @@ function FiltroLista({ etiqueta, cantidad, activo, onClick }) {
 }
 
 function TarjetaPedido({ pedido, onClick, puedeCobrar, onCobrar }) {
-  const pendientes = pedido.pendientesDespacho ?? 0
-  const total = pedido.items?.length ?? 0
+  const cocina = itemsCocina(pedido)
+  const pendientesCocina = cocina.filter((i) => i.estadoDespacho !== ESTADO_DESPACHO.DESPACHADO)
+  const lineas = agruparItems(pendientesCocina)
+  const pendientes = pendientesCocina.length
+  const total = cocina.length
   const listo = pendientes === 0
+  const espera = minutosDesde(pedido.creadoEn)
+  const alerta = !listo && espera >= ALERTA_MINUTOS
 
   return (
     <CardBoton
       onClick={onClick}
       className={cn(
         'flex min-h-36 flex-col justify-between gap-3 p-5',
-        listo ? 'border-hoja-300 bg-hoja-50' : 'border-brasa-200',
+        listo ? 'border-hoja-300 bg-hoja-50' : alerta ? 'border-alerta bg-alerta-suave' : 'border-brasa-200',
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -211,12 +245,19 @@ function TarjetaPedido({ pedido, onClick, puedeCobrar, onCobrar }) {
       </p>
 
       {!listo ? (
-        <p className="line-clamp-2 text-lg leading-snug text-tinta">
-          {(pedido.items ?? [])
-            .filter((item) => item.estadoDespacho !== ESTADO_DESPACHO.DESPACHADO)
-            .map((item) => `${item.cantidad > 1 ? `${item.cantidad}× ` : ''}${etiquetaItem(item)}`)
-            .join(' · ')}
-        </p>
+        <ul className="space-y-1 text-left">
+          {lineas.slice(0, 4).map((linea) => (
+            <li key={linea.clave} className="text-lg leading-snug text-carbon">
+              <span className="monto text-2xl font-extrabold">{linea.cantidad} ×</span>{' '}
+              <span className="font-bold">{linea.descripcion}</span>
+              {linea.observacion ? (
+                <span className="mt-0.5 block text-base font-semibold text-brasa-700">
+                  ↳ {linea.observacion}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {listo && puedeCobrar ? (
@@ -245,12 +286,11 @@ function DetallePedido({
   puedeCobrar,
   onCobrar,
 }) {
-  const pendientes = (pedido.items ?? []).filter(
-    (item) => item.estadoDespacho !== ESTADO_DESPACHO.DESPACHADO,
-  )
-  const pasados = (pedido.items ?? []).filter(
-    (item) => item.estadoDespacho === ESTADO_DESPACHO.DESPACHADO,
-  )
+  const cocina = itemsCocina(pedido)
+  const pendientes = cocina.filter((item) => item.estadoDespacho !== ESTADO_DESPACHO.DESPACHADO)
+  const pasados = cocina.filter((item) => item.estadoDespacho === ESTADO_DESPACHO.DESPACHADO)
+  const lineasPendientes = agruparItems(pendientes)
+  const lineasPasadas = agruparItems(pasados)
 
   return (
     <AppShell
@@ -279,7 +319,7 @@ function DetallePedido({
                 onClick={onPasarTodo}
               >
                 <CheckCheck size={26} />
-                {pasando ? 'Marcando...' : 'Pasar todo'}
+                {pasando ? 'Marcando...' : 'DESPACHADO'}
               </Button>
             ) : puedeCobrar ? (
               <Button tamano="grande" className="min-w-0 flex-[2]" onClick={onCobrar}>
@@ -317,13 +357,13 @@ function DetallePedido({
             <span className="ml-2 text-brasa-600">({pendientes.length})</span>
           </h2>
           <div className="flex flex-col gap-3">
-            {pendientes.map((item) => (
-              <FilaPlato
-                key={item.id}
-                item={item}
+            {lineasPendientes.map((linea) => (
+              <FilaLineaAgrupada
+                key={linea.clave}
+                linea={linea}
                 pendiente
                 disabled={pasando}
-                onClick={() => onPasarItem(item, true)}
+                onClick={() => Promise.all(linea.items.map((item) => onPasarItem(item, true)))}
               />
             ))}
           </div>
@@ -337,13 +377,13 @@ function DetallePedido({
             <span className="ml-2">({pasados.length})</span>
           </h2>
           <div className="flex flex-col gap-3">
-            {pasados.map((item) => (
-              <FilaPlato
-                key={item.id}
-                item={item}
+            {lineasPasadas.map((linea) => (
+              <FilaLineaAgrupada
+                key={linea.clave}
+                linea={linea}
                 pendiente={false}
                 disabled={pasando}
-                onClick={() => onPasarItem(item, false)}
+                onClick={() => Promise.all(linea.items.map((item) => onPasarItem(item, false)))}
               />
             ))}
           </div>
@@ -353,9 +393,7 @@ function DetallePedido({
   )
 }
 
-function FilaPlato({ item, pendiente, disabled, onClick }) {
-  const detalle = detalleItem(item)
-
+function FilaLineaAgrupada({ linea, pendiente, disabled, onClick }) {
   return (
     <button
       type="button"
@@ -368,15 +406,16 @@ function FilaPlato({ item, pendiente, disabled, onClick }) {
         pendiente
           ? 'border-brasa-300 bg-superficie shadow-media hover:border-brasa-500 hover:bg-brasa-50'
           : 'border-hoja-200 bg-hoja-50/60 text-tinta',
+        linea.observacion && pendiente && 'border-brasa-500 bg-brasa-50',
       )}
     >
       <span
         className={cn(
-          'flex size-16 shrink-0 items-center justify-center rounded-full text-2xl font-extrabold tabular-nums',
+          'flex size-20 shrink-0 items-center justify-center rounded-full text-3xl font-extrabold tabular-nums',
           pendiente ? 'bg-brasa-600 text-white' : 'bg-hoja-600 text-white',
         )}
       >
-        {pendiente ? item.cantidad : <Check size={32} strokeWidth={3} />}
+        {pendiente ? linea.cantidad : <Check size={32} strokeWidth={3} />}
       </span>
 
       <span className="min-w-0 flex-1">
@@ -386,16 +425,11 @@ function FilaPlato({ item, pendiente, disabled, onClick }) {
             pendiente ? 'text-carbon' : 'text-tinta line-through decoration-2',
           )}
         >
-          {item.cantidad > 1 && pendiente ? `${item.cantidad}× ` : null}
-          {etiquetaItem(item)}
+          {pendiente ? <span className="monto text-3xl">{linea.cantidad} × </span> : null}
+          {linea.descripcion}
         </span>
-        {detalle ? (
-          <span className="mt-1 block text-lg font-semibold text-brasa-700">{detalle}</span>
-        ) : null}
-        {!pendiente && item.despachadoEn ? (
-          <span className="mt-1 block text-base text-tinta">
-            Pasó a las {horaCorta(item.despachadoEn)}
-          </span>
+        {linea.observacion ? (
+          <span className="mt-1 block text-lg font-semibold text-brasa-700">↳ {linea.observacion}</span>
         ) : null}
       </span>
 
