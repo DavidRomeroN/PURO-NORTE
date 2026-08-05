@@ -5,6 +5,13 @@ import path from 'node:path'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // sockjs-client espera `global` (Node); en el navegador no existe y la app queda en blanco.
+  define: {
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    include: ['sockjs-client', '@stomp/stompjs'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
