@@ -15,7 +15,6 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { catalogoApi } from '@/api/catalogoApi'
 import { mensajeDeError } from '@/api/axiosClient'
 import { useMesas } from '@/hooks/useMesas'
-import { ESTADO_MESA } from '@/utils/constantes'
 import { cn } from '@/utils/cn'
 
 export function MesasAdminPage() {
@@ -55,7 +54,7 @@ export function MesasAdminPage() {
     },
   })
 
-  const ocupada = (mesa) => Boolean(mesa.pedido) || mesa.estado === ESTADO_MESA.OCUPADA
+  const ocupada = (mesa) => Boolean(mesa.pedido)
 
   return (
     <>

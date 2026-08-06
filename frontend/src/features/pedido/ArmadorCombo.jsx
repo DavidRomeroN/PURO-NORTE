@@ -72,14 +72,34 @@ export function ArmadorCombo({ abierto, onOpenChange, onAgregar, guardando, comb
         ) : !combo ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {combos.map((opcion) => (
-              <BotonGrande
-                key={opcion.id}
-                etiqueta={opcion.nombre}
-                detalle={`${opcion.slots?.length ?? 0} palitos`}
-                monto={formatoMoneda(opcion.precioBase)}
-                className="min-h-20"
-                onClick={() => setCombo(opcion)}
-              />
+              <div key={opcion.id} className="flex flex-col gap-2">
+                <BotonGrande
+                  etiqueta={opcion.nombre}
+                  detalle={`${opcion.slots?.length ?? 0} palitos · toca para cambiar`}
+                  monto={formatoMoneda(opcion.precioBase)}
+                  className="min-h-20"
+                  onClick={() => setCombo(opcion)}
+                />
+                <Button
+                  variante="secundaria"
+                  tamano="grande"
+                  className="w-full"
+                  disabled={guardando}
+                  onClick={() =>
+                    onAgregar([
+                      {
+                        tipoItem: TIPO_ITEM.COMBO,
+                        comboId: opcion.id,
+                        sustituciones: [],
+                        cantidad: 1,
+                        paraLlevar: false,
+                      },
+                    ])
+                  }
+                >
+                  {guardando ? 'Agregando...' : `Agregar tal cual — ${formatoMoneda(opcion.precioBase)}`}
+                </Button>
+              </div>
             ))}
           </div>
         ) : (

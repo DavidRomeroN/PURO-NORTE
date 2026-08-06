@@ -1,8 +1,8 @@
 package com.anticucheria.realtime;
 
-import com.anticucheria.dto.response.MesaResponse;
-
-import java.util.List;
-
-public record MesasActualizadasEvent(List<MesaResponse> mesas) {
+/**
+ * Señal de que el listado de mesas cambió. El payload se arma en AFTER_COMMIT
+ * para no publicar un snapshot leído a medias dentro de la transacción.
+ */
+public record MesasActualizadasEvent() {
 }

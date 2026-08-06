@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { catalogoApi } from '@/api/catalogoApi'
 import { pedidosApi } from '@/api/pedidosApi'
-import { ESTADO_MESA } from '@/utils/constantes'
 
 /**
  * Mesas con el total acumulado de su pedido abierto, para responder la pregunta
@@ -47,7 +46,8 @@ export function useMesas() {
     cargando: mesas.isPending,
     error: mesas.error ?? activos.error,
     mesas: conPedido,
-    libres: conPedido.filter((mesa) => !mesa.pedido && mesa.estado === ESTADO_MESA.LIBRE),
+    // Libre = sin cuenta viva. No depender del flag `estado` (puede quedar desfasado).
+    libres: conPedido.filter((mesa) => !mesa.pedido),
     // Los pedidos para llevar no ocupan mesa, así que se listan aparte.
     paraLlevar: pedidos.filter((pedido) => pedido.mesaId == null),
   }

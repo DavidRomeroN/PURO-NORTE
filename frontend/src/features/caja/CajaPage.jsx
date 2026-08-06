@@ -97,11 +97,12 @@ export function CajaPage() {
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="text-xl font-bold text-carbon">{nombrePedido(pedido)}</span>
                       {yaPaso ? <Badge tono="hoja">Ya pasó · cobrar</Badge> : null}
-                      {cerrada ? <Badge tono="brasa">Cuenta cerrada</Badge> : null}
+                      {cerrada ? <Badge tono="brasa">Por cobrar</Badge> : null}
                     </span>
                     <span className="block text-sm text-tinta">
-                      {pedido.items.length} {pedido.items.length === 1 ? 'ítem' : 'ítems'} ·{' '}
+                      {pedido.items.length} {pedido.items.length === 1 ? 'ítem' : 'ítems'} · Entró{' '}
                       {horaCorta(pedido.creadoEn)}
+                      {pedido.cerradoEn ? ` · cerró ${horaCorta(pedido.cerradoEn)}` : ''}
                       {!yaPaso && (pedido.pendientesDespacho ?? 0) > 0
                         ? ` · ${pedido.pendientesDespacho} en parrilla`
                         : null}

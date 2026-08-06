@@ -86,22 +86,33 @@ public class AgrupadorItems {
 
     private String descripcionDe(PedidoItemResponse item) {
         if (item.getTipoItem() == TipoItem.COMBO) {
-            return item.getComboNombre() != null ? item.getComboNombre() : "Combo";
+            String nombre = item.getComboNombre() != null ? item.getComboNombre() : "Combo";
+            String palitos = nombresComponentes(item);
+            return palitos.isEmpty() ? nombre : nombre + " · " + palitos;
         }
         if (item.getComponentes() == null || item.getComponentes().isEmpty()) {
             return item.getTipoItem().name();
         }
-        String nombres = item.getComponentes().stream()
-                .sorted(Comparator.comparing(c -> c.getProductoBaseId() == null ? 0L : c.getProductoBaseId()))
-                .map(ComponenteResponse::getProductoNombre)
-                .filter(Objects::nonNull)
-                .collect(Collectors.joining(" + "));
+        String nombres = nombresComponentes(item);
         if (item.getTipoItem() == TipoItem.ANTICUCHO) {
             return item.getComponentes().size() == 1
                     ? "Anticucho de " + nombres.toLowerCase(Locale.ROOT)
                     : nombres;
         }
         return nombres;
+    }
+
+    private static String nombresComponentes(PedidoItemResponse item) {
+        if (item.getComponentes() == null || item.getComponentes().isEmpty()) {
+            return "";
+        }
+        return item.getComponentes().stream()
+                .sorted(Comparator
+                        .comparing((ComponenteResponse c) -> c.getComboSlotId() == null ? 0L : c.getComboSlotId())
+                        .thenComparing(c -> c.getProductoBaseId() == null ? 0L : c.getProductoBaseId()))
+                .map(ComponenteResponse::getProductoNombre)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining(" + "));
     }
 
     private static String normalizarObs(String obs) {

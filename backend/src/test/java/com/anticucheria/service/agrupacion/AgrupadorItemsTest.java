@@ -90,6 +90,23 @@ class AgrupadorItemsTest {
         assertThat(agrupador.agrupar(null)).isEmpty();
     }
 
+    @Test
+    void mixtoMuestraPalitosEnDescripcion() {
+        var mixto = PedidoItemResponse.builder()
+                .id(1L).tipoItem(TipoItem.COMBO).comboId(1L).comboNombre("Mixto Simple")
+                .cantidad(1).precioFinal(BigDecimal.TEN).paraLlevar(false)
+                .componentes(List.of(
+                        ComponenteResponse.builder().productoBaseId(3L).productoNombre("Carne")
+                                .comboSlotId(10L).esSustitucion(false).build(),
+                        ComponenteResponse.builder().productoBaseId(1L).productoNombre("Corazón")
+                                .comboSlotId(11L).esSustitucion(true).build()))
+                .build();
+
+        var lineas = agrupador.agrupar(List.of(mixto));
+        assertThat(lineas).hasSize(1);
+        assertThat(lineas.get(0).getDescripcion()).isEqualTo("Mixto Simple · Carne + Corazón");
+    }
+
     private static PedidoItemResponse anticucho(Long id, int cantidad, List<ComponenteResponse> comps,
                                                 String obs, boolean llevar) {
         return PedidoItemResponse.builder()

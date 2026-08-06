@@ -44,16 +44,16 @@ export function numerosDeMesa(pedido) {
   return [pedido.mesaNumero, ...(pedido.mesasUnidas ?? []).map((mesa) => mesa.numero)]
 }
 
-/** Segunda línea del ítem: sustituciones, para llevar y observaciones. */
+/** Segunda línea del ítem: palitos del mixto, para llevar y observaciones. */
 export function detalleItem(item) {
   const partes = []
 
   if (item.tipoItem === TIPO_ITEM.COMBO) {
-    const cambios = (item.componentes ?? [])
-      .filter((componente) => componente.esSustitucion)
+    const palitos = (item.componentes ?? [])
       .map((componente) => componente.productoNombre)
-    if (cambios.length > 0) {
-      partes.push(`con ${cambios.join(', ')}`)
+      .filter(Boolean)
+    if (palitos.length > 0) {
+      partes.push(palitos.join(' + '))
     }
   }
 

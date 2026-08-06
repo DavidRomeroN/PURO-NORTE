@@ -10,6 +10,7 @@ import { useMesas } from '@/hooks/useMesas'
 import { useAuth } from '@/hooks/useAuth'
 import { formatoMoneda } from '@/utils/formatoMoneda'
 import { horaCorta } from '@/utils/fechas'
+import { ESTADO_PEDIDO } from '@/utils/constantes'
 
 export function MesasPage() {
   const { mesas, paraLlevar, cargando } = useMesas()
@@ -67,7 +68,15 @@ export function MesasPage() {
                       Para llevar {pedido.numeroLlevar}
                     </span>
                     <span className="block text-sm font-semibold text-brasa-700">
-                      {horaCorta(pedido.creadoEn)}
+                      Entró {horaCorta(pedido.creadoEn)}
+                      {pedido.mozoNombre ? ` · ${pedido.mozoNombre}` : ''}
+                    </span>
+                    <span className="block text-sm text-tinta">
+                      {pedido.items?.length ?? 0}{' '}
+                      {(pedido.items?.length ?? 0) === 1 ? 'ítem' : 'ítems'}
+                      {(pedido.pendientesDespacho ?? 0) > 0
+                        ? ` · ${pedido.pendientesDespacho} en parrilla`
+                        : ' · listo'}
                     </span>
                   </span>
                   <span className="monto shrink-0 text-xl font-extrabold text-carbon">
@@ -99,7 +108,13 @@ export function MesasPage() {
                     donde vive la cuenta. */}
                 <MesaCard
                   mesa={mesa}
-                  onAbrir={() => navigate(`/pedido/${mesa.pedido?.mesaId ?? mesa.id}`)}
+                  onAbrir={() => {
+                    if (mesa.pedido?.estado === ESTADO_PEDIDO.CERRADO) {
+                      navigate(`/cobrar/${mesa.pedido.id}`)
+                      return
+                    }
+                    navigate(`/pedido/${mesa.pedido?.mesaId ?? mesa.id}`)
+                  }}
                 />
               </li>
             ))}

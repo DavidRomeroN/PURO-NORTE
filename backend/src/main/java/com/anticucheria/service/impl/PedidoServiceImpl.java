@@ -42,6 +42,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -344,15 +345,23 @@ public class PedidoServiceImpl implements PedidoService {
     @Override
     @Transactional(readOnly = true)
     public List<PedidoResponse> listarActivos() {
-        return listar(EstadoPedido.ABIERTO);
+        // ABIERTO y CERRADO siguen ocupando mesa; PAGADO/ANULADO no.
+        return pedidoRepository.findByEstadoInOrderByCreadoEnDesc(
+                        List.of(EstadoPedido.ABIERTO, EstadoPedido.CERRADO))
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<PedidoResponse> listarParaParrilla() {
+        // Cola por tanda: el pedido cuya cocina pendiente es más nueva va al final
+        // (si mesa 4 pide de nuevo tras despachar, no vuelve al tope).
         return pedidoRepository.findParaParrilla().stream()
                 .map(this::toResponse)
-                .filter(pedido -> !pedido.getItems().isEmpty())
+                .filter(pedido -> pedido.getItems().stream().anyMatch(this::esCocina))
+                .sorted(Comparator.comparingLong(this::ordenColaParrilla))
                 .toList();
     }
 
@@ -361,6 +370,9 @@ public class PedidoServiceImpl implements PedidoService {
     public PedidoResponse marcarDespachoItem(Long pedidoId, Long itemId, boolean despachado) {
         Pedido pedido = exigirPedidoVivoParaDespacho(pedidoId);
         PedidoItem item = buscarItem(pedidoId, itemId);
+        if (!afectaParrilla(item.getTipoItem())) {
+            throw new ReglaNegocioException("Las bebidas y extras no pasan por la parrilla");
+        }
 
         if (despachado) {
             item.setEstadoDespacho(EstadoDespacho.DESPACHADO);
@@ -380,12 +392,14 @@ public class PedidoServiceImpl implements PedidoService {
         Pedido pedido = exigirPedidoVivoParaDespacho(pedidoId);
         LocalDateTime ahora = LocalDateTime.now();
 
-        List<PedidoItem> items = pedidoItemRepository.findByPedidoId(pedidoId);
+        // Solo cocina: bebidas/extras no pasan por la parrilla.
+        List<PedidoItem> items = pedidoItemRepository.findByPedidoId(pedidoId).stream()
+                .filter(item -> afectaParrilla(item.getTipoItem()))
+                .filter(item -> item.getEstadoDespacho() != EstadoDespacho.DESPACHADO)
+                .toList();
         for (PedidoItem item : items) {
-            if (item.getEstadoDespacho() != EstadoDespacho.DESPACHADO) {
-                item.setEstadoDespacho(EstadoDespacho.DESPACHADO);
-                item.setDespachadoEn(ahora);
-            }
+            item.setEstadoDespacho(EstadoDespacho.DESPACHADO);
+            item.setDespachadoEn(ahora);
         }
         pedidoItemRepository.saveAll(items);
 
@@ -399,6 +413,23 @@ public class PedidoServiceImpl implements PedidoService {
 
     private static boolean afectaParrilla(TipoItem tipo) {
         return tipo == TipoItem.ANTICUCHO || tipo == TipoItem.COMBO;
+    }
+
+    private boolean esCocina(com.anticucheria.dto.response.PedidoItemResponse item) {
+        return afectaParrilla(item.getTipoItem());
+    }
+
+    /**
+     * Menor id de ítem de cocina aún pendiente. Si ya despacharon todo y vuelven a pedir
+     * en la misma mesa, los nuevos ids son mayores y el pedido va al final de la cola.
+     */
+    private long ordenColaParrilla(PedidoResponse pedido) {
+        return pedido.getItems().stream()
+                .filter(this::esCocina)
+                .filter(item -> item.getEstadoDespacho() != EstadoDespacho.DESPACHADO)
+                .mapToLong(item -> item.getId() == null ? Long.MAX_VALUE : item.getId())
+                .min()
+                .orElse(Long.MAX_VALUE);
     }
 
     /**
@@ -599,6 +630,7 @@ public class PedidoServiceImpl implements PedidoService {
                 .motivoAnulacion(pedido.getMotivoAnulacion())
                 .total(total)
                 .pendientesDespacho((int) items.stream()
+                        .filter(item -> afectaParrilla(item.getTipoItem()))
                         .filter(item -> item.getEstadoDespacho() != EstadoDespacho.DESPACHADO)
                         .count())
                 .items(items.stream().map(this::toItemResponse).toList())

@@ -39,12 +39,25 @@ export function claveAgrupacion(item) {
   return `${tipo}|${componentes}|${obsClave}|${llevar}`
 }
 
-export function descripcionItem(item) {
-  if (item.tipoItem === 'COMBO') return item.comboNombre || 'Combo'
-  const nombres = [...(item.componentes ?? [])]
-    .sort((a, b) => (a.productoBaseId ?? 0) - (b.productoBaseId ?? 0))
+function nombresComponentes(item) {
+  return [...(item.componentes ?? [])]
+    .sort((a, b) => {
+      const sa = a.comboSlotId ?? 0
+      const sb = b.comboSlotId ?? 0
+      if (sa !== sb) return sa - sb
+      return (a.productoBaseId ?? 0) - (b.productoBaseId ?? 0)
+    })
     .map((c) => c.productoNombre)
     .filter(Boolean)
+}
+
+export function descripcionItem(item) {
+  if (item.tipoItem === 'COMBO') {
+    const nombre = item.comboNombre || 'Combo'
+    const palitos = nombresComponentes(item).join(' + ')
+    return palitos ? `${nombre} · ${palitos}` : nombre
+  }
+  const nombres = nombresComponentes(item)
   if (!nombres.length) return item.tipoItem
   if (item.tipoItem === 'ANTICUCHO' && nombres.length === 1) {
     return `Anticucho de ${nombres[0].toLowerCase()}`

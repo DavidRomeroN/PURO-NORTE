@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardBoton } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { EstadoCarga } from '@/components/common/EstadoCarga'
-import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { EditarPrecioDialog } from '@/components/common/EditarPrecioDialog'
 import { ListaItemsPedido } from '@/features/pedido/ListaItemsPedido'
 import { AnularCuentaDialog } from '@/features/pedido/AnularCuentaDialog'
@@ -41,12 +40,10 @@ export function CobrarPage() {
   const { puedeCobrar } = useAuth()
 
   const { data: pedido, isPending } = usePedido(pedidoId)
-  const { editarPrecio, cerrarPedido, anularPedido } = useAccionesPedido()
+  const { editarPrecio, anularPedido } = useAccionesPedido()
 
   const [itemEnEdicion, setItemEnEdicion] = useState(null)
-  const [confirmarCierre, setConfirmarCierre] = useState(false)
   const [anulando, setAnulando] = useState(false)
-  const [quiereBoleta, setQuiereBoleta] = useState(null)
   const [tipoBoleta, setTipoBoleta] = useState(TIPO_BOLETA.CONSUMO)
   const [medioPago, setMedioPago] = useState(MEDIOS_PAGO[0].valor)
   const [dni, setDni] = useState('')
@@ -63,6 +60,10 @@ export function CobrarPage() {
       }),
     onSuccess: (emitida) => {
       setBoleta(emitida)
+      // Quitar la cuenta cobrada del listado activo al toque (evita mesa "fantasma").
+      queryClient.setQueryData(['pedidos', 'activos'], (prev) =>
+        Array.isArray(prev) ? prev.filter((p) => p.id !== Number(pedidoId)) : prev,
+      )
       queryClient.invalidateQueries({ queryKey: ['pedidos'] })
       queryClient.invalidateQueries({ queryKey: ['mesas'] })
       queryClient.invalidateQueries({ queryKey: ['boletas'] })
@@ -311,16 +312,6 @@ export function CobrarPage() {
     }
   }
 
-  async function cerrarCuenta() {
-    try {
-      await cerrarPedido.mutateAsync(pedido.id)
-      setConfirmarCierre(false)
-      toast.success('Cuenta cerrada')
-    } catch (error) {
-      toast.error(mensajeDeError(error))
-    }
-  }
-
   async function anularCuenta(motivo) {
     try {
       await anularPedido.mutateAsync({ pedidoId: pedido.id, motivo })
@@ -332,15 +323,21 @@ export function CobrarPage() {
     }
   }
 
+  const subtitulo = [
+    `Entró ${horaCorta(pedido.creadoEn)}`,
+    pedido.cerradoEn ? `cerró ${horaCorta(pedido.cerradoEn)}` : null,
+    `${pedido.items?.length ?? 0} ítem${(pedido.items?.length ?? 0) === 1 ? '' : 's'}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   const barra = (
     <TotalBar
       total={pedido.total}
-      etiqueta={abierto ? 'Total' : 'Total a cobrar'}
-      accion={abierto ? 'Cerrar cuenta' : quiereBoleta ? 'Emitir boleta' : null}
-      accionDeshabilitada={
-        generarBoleta.isPending || cerrarPedido.isPending || (!abierto && dniBloqueaEmision)
-      }
-      onAccion={() => (abierto ? setConfirmarCierre(true) : generarBoleta.mutate())}
+      etiqueta="Total a cobrar"
+      accion={generarBoleta.isPending ? 'Cobrando...' : 'Cobrar'}
+      accionDeshabilitada={generarBoleta.isPending || dniBloqueaEmision}
+      onAccion={() => generarBoleta.mutate()}
     />
   )
 
@@ -348,100 +345,73 @@ export function CobrarPage() {
     <>
       <AppShell
         titulo={`Cobrar ${nombrePedido(pedido).toLowerCase()}`}
-        subtitulo={`Abierto ${horaCorta(pedido.creadoEn)}`}
+        subtitulo={subtitulo}
         onVolver={() => navigate('/caja')}
         conNav={false}
         barraInferior={barra}
       >
-        <ListaItemsPedido
-          items={pedido.items}
-          onEditarPrecio={abierto && puedeCobrar ? setItemEnEdicion : null}
-        />
+        <section className="mb-6">
+          <h2 className="mb-2 text-lg font-bold text-carbon">Detalle de la mesa</h2>
+          <ListaItemsPedido
+            items={pedido.items}
+            onEditarPrecio={abierto && puedeCobrar ? setItemEnEdicion : null}
+          />
+        </section>
 
-        {!abierto ? (
-          <section className="mt-6 flex flex-col gap-3">
-            {quiereBoleta === null ? (
-              <>
-                <h2 className="text-xl font-bold text-carbon">¿Emitir boleta?</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  <Button tamano="grande" onClick={() => setQuiereBoleta(true)}>
-                    Sí
-                  </Button>
-                  <Button
-                    variante="secundaria"
-                    tamano="grande"
-                    onClick={() => {
-                      toast.success('Cuenta cerrada. Puedes emitir la boleta después desde Caja.')
-                      navigate('/caja')
-                    }}
-                  >
-                    No
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h2 className="text-xl font-bold text-carbon">Tipo de boleta</h2>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <OpcionBoleta
-                    titulo="Por consumo"
-                    descripcion="Solo el monto total"
-                    activa={tipoBoleta === TIPO_BOLETA.CONSUMO}
-                    onClick={() => setTipoBoleta(TIPO_BOLETA.CONSUMO)}
-                  />
-                  <OpcionBoleta
-                    titulo="Detallada"
-                    descripcion="Lista de todo lo consumido"
-                    activa={tipoBoleta === TIPO_BOLETA.DETALLADO}
-                    onClick={() => setTipoBoleta(TIPO_BOLETA.DETALLADO)}
-                  />
-                </div>
+        <section className="flex flex-col gap-3">
+          <h2 className="text-xl font-bold text-carbon">Tipo de boleta</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <OpcionBoleta
+              titulo="Por consumo"
+              descripcion="Solo el monto total"
+              activa={tipoBoleta === TIPO_BOLETA.CONSUMO}
+              onClick={() => setTipoBoleta(TIPO_BOLETA.CONSUMO)}
+            />
+            <OpcionBoleta
+              titulo="Detallada"
+              descripcion="Lista de todo lo consumido"
+              activa={tipoBoleta === TIPO_BOLETA.DETALLADO}
+              onClick={() => setTipoBoleta(TIPO_BOLETA.DETALLADO)}
+            />
+          </div>
 
-                <h2 className="mt-3 text-xl font-bold text-carbon">¿Cómo paga?</h2>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {MEDIOS_PAGO.map((medio) => (
-                    <CardBoton
-                      key={medio.valor}
-                      seleccionada={medioPago === medio.valor}
-                      aria-pressed={medioPago === medio.valor}
-                      onClick={() => setMedioPago(medio.valor)}
-                      className="min-h-16 px-4 text-center text-lg font-bold text-carbon"
-                    >
-                      {medio.etiqueta}
-                    </CardBoton>
-                  ))}
-                </div>
+          <h2 className="mt-3 text-xl font-bold text-carbon">¿Cómo paga?</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {MEDIOS_PAGO.map((medio) => (
+              <CardBoton
+                key={medio.valor}
+                seleccionada={medioPago === medio.valor}
+                aria-pressed={medioPago === medio.valor}
+                onClick={() => setMedioPago(medio.valor)}
+                className="min-h-16 px-4 text-center text-lg font-bold text-carbon"
+              >
+                {medio.etiqueta}
+              </CardBoton>
+            ))}
+          </div>
 
-                <h2 className="mt-3 text-xl font-bold text-carbon">
-                  DNI del cliente{dniObligatorio ? '' : ' (opcional)'}
-                </h2>
-                <Input
-                  value={dni}
-                  onChange={(evento) => setDni(evento.target.value.replace(/\D/g, '').slice(0, 8))}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="8 dígitos"
-                  aria-invalid={dniBloqueaEmision}
-                  className="monto max-w-xs text-2xl tracking-widest"
-                />
+          <h2 className="mt-3 text-xl font-bold text-carbon">
+            DNI del cliente{dniObligatorio ? '' : ' (opcional)'}
+          </h2>
+          <Input
+            value={dni}
+            onChange={(evento) => setDni(evento.target.value.replace(/\D/g, '').slice(0, 8))}
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="8 dígitos"
+            aria-invalid={dniBloqueaEmision}
+            className="monto max-w-xs text-2xl tracking-widest"
+          />
 
-                <VerificacionDni consultando={consultandoDni} resultado={clienteDni} />
+          <VerificacionDni consultando={consultandoDni} resultado={clienteDni} />
 
-                <p className="text-base text-tinta">
-                  {dniObligatorio
-                    ? 'Desde S/700 SUNAT exige identificar al comprador.'
-                    : 'Solo si el cliente quiere la boleta a su nombre.'}
-                </p>
-              </>
-            )}
-          </section>
-        ) : null}
+          <p className="text-base text-tinta">
+            {dniObligatorio
+              ? 'Desde S/700 SUNAT exige identificar al comprador.'
+              : 'Solo si el cliente quiere la boleta a su nombre.'}
+          </p>
+        </section>
 
-        {/*
-          Discreto y al final: casi siempre lo que toca es cobrar. Pero una cuenta cerrada
-          sin pagar deja la mesa ocupada igual que una abierta, y si el grupo se fue hay
-          que poder descartarla desde acá sin volver al salón.
-        */}
         <Button
           variante="destructiva"
           tamano="grande"
@@ -466,16 +436,6 @@ export function CobrarPage() {
         pedido={pedido}
         onAnular={anularCuenta}
         anulando={anularPedido.isPending}
-      />
-
-      <ConfirmDialog
-        abierto={confirmarCierre}
-        onOpenChange={setConfirmarCierre}
-        titulo="¿Cerrar la cuenta?"
-        descripcion={`Después de cerrar ya no se pueden agregar platos. Total: ${formatoMoneda(pedido.total)}`}
-        textoConfirmar="Sí, cerrar"
-        enProceso={cerrarPedido.isPending}
-        onConfirmar={cerrarCuenta}
       />
     </>
   )

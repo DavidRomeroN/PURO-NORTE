@@ -69,8 +69,8 @@ public class BoletaServiceImpl implements BoletaService {
         Pedido pedido = pedidoRepository.findById(request.getPedidoId())
                 .orElseThrow(() -> new ResourceNotFoundException("Pedido no encontrado: " + request.getPedidoId()));
 
-        if (pedido.getEstado() != EstadoPedido.CERRADO) {
-            throw new ReglaNegocioException("Solo se puede facturar un pedido cerrado");
+        if (pedido.getEstado() != EstadoPedido.ABIERTO && pedido.getEstado() != EstadoPedido.CERRADO) {
+            throw new ReglaNegocioException("Solo se puede cobrar una cuenta abierta o cerrada");
         }
         if (boletaRepository.existsByPedidoId(pedido.getId())) {
             throw new ReglaNegocioException("El pedido " + pedido.getId() + " ya tiene una boleta emitida");
@@ -80,9 +80,19 @@ public class BoletaServiceImpl implements BoletaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cajero no encontrado: " + cajeroUsername));
 
         List<PedidoItem> items = pedidoItemRepository.findByPedidoId(pedido.getId());
+        if (items.isEmpty()) {
+            throw new ReglaNegocioException("No se puede cobrar una cuenta sin ítems");
+        }
         BigDecimal montoTotal = items.stream()
                 .map(item -> item.getPrecioFinal().multiply(BigDecimal.valueOf(item.getCantidad())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Cobro directo: ya no hace falta el paso "cerrar cuenta".
+        if (pedido.getEstado() == EstadoPedido.ABIERTO) {
+            pedido.setEstado(EstadoPedido.CERRADO);
+            pedido.setCerradoEn(LocalDateTime.now());
+            pedidoRepository.save(pedido);
+        }
 
         String dni = normalizarDni(request.getDniCliente());
         exigirDniEnBoletasGrandes(montoTotal, dni);
@@ -292,13 +302,18 @@ public class BoletaServiceImpl implements BoletaService {
      * liberan todas: quedarse ocupada una mesa vacia significa no poder sentar clientes.
      */
     private void liberarMesas(Pedido pedido) {
-        List<Mesa> ocupadas = new ArrayList<>(pedido.getMesasUnidas());
+        List<Long> ids = new ArrayList<>();
         if (pedido.getMesa() != null) {
-            ocupadas.add(pedido.getMesa());
+            ids.add(pedido.getMesa().getId());
         }
-        for (Mesa mesa : ocupadas) {
-            mesa.setEstado(EstadoMesa.LIBRE);
-            mesaRepository.save(mesa);
+        for (Mesa unida : pedido.getMesasUnidas()) {
+            ids.add(unida.getId());
+        }
+        for (Long id : ids) {
+            mesaRepository.findById(id).ifPresent(mesa -> {
+                mesa.setEstado(EstadoMesa.LIBRE);
+                mesaRepository.saveAndFlush(mesa);
+            });
         }
     }
 

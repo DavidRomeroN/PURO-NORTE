@@ -25,6 +25,10 @@ function itemsCocina(pedido) {
   )
 }
 
+function pendientesCocinaDe(pedido) {
+  return itemsCocina(pedido).filter((i) => i.estadoDespacho !== ESTADO_DESPACHO.DESPACHADO)
+}
+
 function minutosDesde(fechaIso) {
   if (!fechaIso) return 0
   const fecha = new Date(fechaIso)
@@ -34,13 +38,7 @@ function minutosDesde(fechaIso) {
 
 /**
  * Pantalla del parrillero. Pensada para tablet a distancia: tipografía grande,
- * contraste alto y botones grandes. Se actualiza sola cada 5 segundos.
- *
- * Flujo:
- * 1. Lista de pedidos con platos pendientes (el más viejo primero).
- * 2. Tocás uno → ves qué falta y qué ya pasó.
- * 3. Tocás un plato para marcarlo, o "Pasar todo" si salió junto.
- * 4. Los que faltan siguen arriba; los pasados quedan abajo por si hay que deshacer.
+ * contraste alto y botones grandes.
  */
 export function ParrillaPage() {
   const navigate = useNavigate()
@@ -51,18 +49,28 @@ export function ParrillaPage() {
   const [mostrarListos, setMostrarListos] = useState(false)
   const [confirmarDespacho, setConfirmarDespacho] = useState(false)
 
+  // Solo cocina cuenta: bebidas no deben meter un pedido en "Por pasar".
   const pendientes = useMemo(
-    () => pedidos.filter((pedido) => (pedido.pendientesDespacho ?? 0) > 0),
+    () => pedidos.filter((pedido) => pendientesCocinaDe(pedido).length > 0),
     [pedidos],
   )
   const listos = useMemo(
-    () => pedidos.filter((pedido) => (pedido.pendientesDespacho ?? 0) === 0),
+    () =>
+      pedidos.filter(
+        (pedido) => itemsCocina(pedido).length > 0 && pendientesCocinaDe(pedido).length === 0,
+      ),
     [pedidos],
   )
 
   const pedido = pedidos.find((p) => p.id === pedidoId) ?? null
 
-  // Si el pedido elegido se cobró o anuló y desapareció del listado, vuelve a la lista.
+  // Número de cola visible (#1, #2…) según el orden ya ordenado del backend.
+  const numeroCola = useMemo(() => {
+    const mapa = new Map()
+    pendientes.forEach((p, i) => mapa.set(p.id, i + 1))
+    return mapa
+  }, [pendientes])
+
   useEffect(() => {
     if (pedidoId && !isPending && !pedido) {
       setPedidoId(null)
@@ -90,7 +98,7 @@ export function ParrillaPage() {
           : 'Todo el pedido marcado como pasado',
       )
       setConfirmarDespacho(false)
-      setMostrarListos(true)
+      // Se queda en "Por pasar": no saltar a "Ya pasaron".
       setPedidoId(null)
     } catch (error) {
       toast.error(mensajeDeError(error))
@@ -102,6 +110,7 @@ export function ParrillaPage() {
       <>
         <DetallePedido
           pedido={pedido}
+          orden={numeroCola.get(pedido.id)}
           onVolver={() => setPedidoId(null)}
           onPasarItem={pasarItem}
           onPasarTodo={() => setConfirmarDespacho(true)}
@@ -169,6 +178,7 @@ export function ParrillaPage() {
             <TarjetaPedido
               key={item.id}
               pedido={item}
+              orden={mostrarListos ? null : numeroCola.get(item.id)}
               onClick={() => setPedidoId(item.id)}
               puedeCobrar={puedeCobrar}
               onCobrar={() => navigate(`/cobrar/${item.id}`)}
@@ -198,7 +208,7 @@ function FiltroLista({ etiqueta, cantidad, activo, onClick }) {
   )
 }
 
-function TarjetaPedido({ pedido, onClick, puedeCobrar, onCobrar }) {
+function TarjetaPedido({ pedido, orden, onClick, puedeCobrar, onCobrar }) {
   const cocina = itemsCocina(pedido)
   const pendientesCocina = cocina.filter((i) => i.estadoDespacho !== ESTADO_DESPACHO.DESPACHADO)
   const lineas = agruparItems(pendientesCocina)
@@ -218,11 +228,16 @@ function TarjetaPedido({ pedido, onClick, puedeCobrar, onCobrar }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-3xl font-extrabold leading-none tracking-tight text-carbon">
-            {nombrePedido(pedido)}
+          <p className="flex flex-wrap items-baseline gap-2">
+            {orden != null ? (
+              <span className="monto text-2xl font-extrabold text-brasa-600">#{orden}</span>
+            ) : null}
+            <span className="text-3xl font-extrabold leading-none tracking-tight text-carbon">
+              {nombrePedido(pedido)}
+            </span>
           </p>
           <p className="mt-2 text-lg text-tinta">
-            {horaCorta(pedido.creadoEn)}
+            Entró {horaCorta(pedido.creadoEn)}
             <span className="mx-2 text-borde-fuerte">·</span>
             {minutosEspera(pedido.creadoEn)}
           </p>
@@ -279,6 +294,7 @@ function TarjetaPedido({ pedido, onClick, puedeCobrar, onCobrar }) {
 
 function DetallePedido({
   pedido,
+  orden,
   onVolver,
   onPasarItem,
   onPasarTodo,
@@ -294,8 +310,8 @@ function DetallePedido({
 
   return (
     <AppShell
-      titulo={nombrePedido(pedido)}
-      subtitulo={`${horaCorta(pedido.creadoEn)} · ${minutosEspera(pedido.creadoEn)}`}
+      titulo={orden != null ? `#${orden} · ${nombrePedido(pedido)}` : nombrePedido(pedido)}
+      subtitulo={`Entró ${horaCorta(pedido.creadoEn)} · ${minutosEspera(pedido.creadoEn)}`}
       onVolver={onVolver}
       conNav={false}
       ancho="ancho"
@@ -452,7 +468,6 @@ function FilaLineaAgrupada({ linea, pendiente, disabled, onClick }) {
   )
 }
 
-/** "hace 3 min" — el parrillero ve de un vistazo quién lleva más rato esperando. */
 function minutosEspera(fechaIso) {
   if (!fechaIso) return ''
   const fecha = new Date(fechaIso)

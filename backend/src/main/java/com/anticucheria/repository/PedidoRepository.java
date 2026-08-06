@@ -14,6 +14,8 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
 
     List<Pedido> findByEstadoOrderByCreadoEnDesc(EstadoPedido estado);
 
+    List<Pedido> findByEstadoInOrderByCreadoEnDesc(List<EstadoPedido> estados);
+
     List<Pedido> findAllByOrderByCreadoEnDesc();
 
     /**
