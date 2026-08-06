@@ -657,6 +657,12 @@ public class PedidoServiceImpl implements PedidoService {
                         .productoNombre(c.getProductoBase().getNombre())
                         .comboSlotId(c.getComboSlot() != null ? c.getComboSlot().getId() : null)
                         .esSustitucion(c.getEsSustitucion())
+                        .productoOriginalNombre(
+                                Boolean.TRUE.equals(c.getEsSustitucion())
+                                        && c.getComboSlot() != null
+                                        && c.getComboSlot().getProductoBaseDefault() != null
+                                        ? c.getComboSlot().getProductoBaseDefault().getNombre()
+                                        : null)
                         .precioUnitarioSnapshot(c.getPrecioUnitarioSnapshot())
                         .build()).toList())
                 .build();

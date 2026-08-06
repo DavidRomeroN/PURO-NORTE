@@ -13,5 +13,7 @@ public class ComponenteResponse {
     private String productoNombre;
     private Long comboSlotId;
     private Boolean esSustitucion;
+    /** Nombre del palito por defecto del slot, solo si hubo sustitución. */
+    private String productoOriginalNombre;
     private BigDecimal precioUnitarioSnapshot;
 }

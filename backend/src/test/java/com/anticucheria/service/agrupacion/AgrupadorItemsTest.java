@@ -29,6 +29,26 @@ class AgrupadorItemsTest {
 
         assertThat(lineas).hasSize(1);
         assertThat(lineas.get(0).getCantidad()).isEqualTo(3);
+        assertThat(lineas.get(0).getDescripcion()).isEqualTo("Anticucho de carne");
+    }
+
+    @Test
+    void dobleSeLeeComoDobleDeXyY() {
+        var lineas = agrupador.agrupar(List.of(
+                anticucho(1L, 1, List.of(comp(3L, "Carne"), comp(1L, "Corazón")), null, false)));
+
+        assertThat(lineas.get(0).getDescripcion()).isEqualTo("doble de carne y corazón");
+    }
+
+    @Test
+    void tripleSeLeeComoTripleDe() {
+        var lineas = agrupador.agrupar(List.of(
+                anticucho(1L, 1, List.of(
+                        comp(3L, "Carne"),
+                        comp(5L, "Chorizo"),
+                        comp(6L, "Salchicha")), null, false)));
+
+        assertThat(lineas.get(0).getDescripcion()).isEqualTo("triple de carne, chorizo y salchicha");
     }
 
     @Test
@@ -62,14 +82,16 @@ class AgrupadorItemsTest {
                 .cantidad(1).precioFinal(BigDecimal.TEN).paraLlevar(false)
                 .componentes(List.of(
                         ComponenteResponse.builder().productoBaseId(3L).productoNombre("Carne")
-                                .comboSlotId(10L).esSustitucion(true).build()))
+                                .comboSlotId(10L).esSustitucion(true)
+                                .productoOriginalNombre("Pollo").build()))
                 .build();
         var b = PedidoItemResponse.builder()
                 .id(2L).tipoItem(TipoItem.COMBO).comboId(1L).comboNombre("Mixto")
                 .cantidad(1).precioFinal(BigDecimal.TEN).paraLlevar(false)
                 .componentes(List.of(
                         ComponenteResponse.builder().productoBaseId(4L).productoNombre("Pollo")
-                                .comboSlotId(10L).esSustitucion(true).build()))
+                                .comboSlotId(10L).esSustitucion(true)
+                                .productoOriginalNombre("Carne").build()))
                 .build();
 
         assertThat(agrupador.agrupar(List.of(a, b))).hasSize(2);
@@ -91,7 +113,7 @@ class AgrupadorItemsTest {
     }
 
     @Test
-    void mixtoMuestraPalitosEnDescripcion() {
+    void mixtoUnCambio_muestraNuevoPorOriginal() {
         var mixto = PedidoItemResponse.builder()
                 .id(1L).tipoItem(TipoItem.COMBO).comboId(1L).comboNombre("Mixto Simple")
                 .cantidad(1).precioFinal(BigDecimal.TEN).paraLlevar(false)
@@ -99,12 +121,34 @@ class AgrupadorItemsTest {
                         ComponenteResponse.builder().productoBaseId(3L).productoNombre("Carne")
                                 .comboSlotId(10L).esSustitucion(false).build(),
                         ComponenteResponse.builder().productoBaseId(1L).productoNombre("Corazón")
-                                .comboSlotId(11L).esSustitucion(true).build()))
+                                .comboSlotId(11L).esSustitucion(true)
+                                .productoOriginalNombre("Carne").build()))
                 .build();
 
         var lineas = agrupador.agrupar(List.of(mixto));
         assertThat(lineas).hasSize(1);
-        assertThat(lineas.get(0).getDescripcion()).isEqualTo("Mixto Simple · Carne + Corazón");
+        assertThat(lineas.get(0).getDescripcion()).isEqualTo("mixto corazón por carne");
+    }
+
+    @Test
+    void mixtoDosCambios_listaLosPalitos() {
+        var mixto = PedidoItemResponse.builder()
+                .id(1L).tipoItem(TipoItem.COMBO).comboId(1L).comboNombre("Mixto Simple")
+                .cantidad(1).precioFinal(BigDecimal.TEN).paraLlevar(false)
+                .componentes(List.of(
+                        ComponenteResponse.builder().productoBaseId(1L).productoNombre("Corazón")
+                                .comboSlotId(10L).esSustitucion(true)
+                                .productoOriginalNombre("Carne").build(),
+                        ComponenteResponse.builder().productoBaseId(4L).productoNombre("Pollo")
+                                .comboSlotId(11L).esSustitucion(true)
+                                .productoOriginalNombre("Hígado").build(),
+                        ComponenteResponse.builder().productoBaseId(6L).productoNombre("Salchicha")
+                                .comboSlotId(12L).esSustitucion(false).build()))
+                .build();
+
+        var lineas = agrupador.agrupar(List.of(mixto));
+        assertThat(lineas.get(0).getDescripcion())
+                .isEqualTo("Mixto Simple · Corazón + Pollo + Salchicha");
     }
 
     private static PedidoItemResponse anticucho(Long id, int cantidad, List<ComponenteResponse> comps,

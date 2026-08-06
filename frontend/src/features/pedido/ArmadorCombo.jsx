@@ -11,8 +11,18 @@ import { calcularPrecioCombo, diferenciaDeSustitucion } from '@/hooks/useCalculo
 import { formatoMoneda } from '@/utils/formatoMoneda'
 import { TIPO_ITEM } from '@/utils/constantes'
 
-export function ArmadorCombo({ abierto, onOpenChange, onAgregar, guardando, comboInicial = null }) {
-  const { combos, anticuchos, cargando } = useCatalogo()
+/**
+ * Editor de palitos de un combo. Se abre desde la canasta (Cambiar), no al elegir el mixto.
+ */
+export function ArmadorCombo({
+  abierto,
+  onOpenChange,
+  onGuardar,
+  guardando,
+  comboInicial = null,
+  sustitucionesIniciales = {},
+}) {
+  const { anticuchos, cargando } = useCatalogo()
   const [combo, setCombo] = useState(null)
   const [sustituciones, setSustituciones] = useState({})
   const [slotEnEdicion, setSlotEnEdicion] = useState(null)
@@ -24,84 +34,72 @@ export function ArmadorCombo({ abierto, onOpenChange, onAgregar, guardando, comb
       setSlotEnEdicion(null)
       return
     }
-    if (comboInicial) {
-      setCombo(comboInicial)
-      setSustituciones({})
-      setSlotEnEdicion(null)
-    }
+    setCombo(comboInicial)
+    setSustituciones(sustitucionesIniciales ?? {})
+    setSlotEnEdicion(null)
+    // Solo al abrir: no resetear mientras el mozo cambia palitos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, comboInicial])
 
   const total = calcularPrecioCombo(combo, sustituciones)
 
   function elegirReemplazo(slot, producto) {
-    setSustituciones((actuales) => ({ ...actuales, [slot.id]: producto }))
+    const defaultId = slot.productoBaseDefault?.id
+    setSustituciones((actuales) => {
+      const siguiente = { ...actuales }
+      if (producto.id === defaultId) {
+        delete siguiente[slot.id]
+      } else {
+        siguiente[slot.id] = producto
+      }
+      return siguiente
+    })
     setSlotEnEdicion(null)
   }
 
-  function agregar() {
-    onAgregar([
-      {
-        tipoItem: TIPO_ITEM.COMBO,
-        comboId: combo.id,
-        sustituciones: Object.entries(sustituciones).map(([comboSlotId, producto]) => ({
-          comboSlotId: Number(comboSlotId),
-          productoBaseNuevoId: producto.id,
-        })),
-        cantidad: 1,
-        paraLlevar: false,
-      },
-    ])
+  function guardar() {
+    if (!combo) return
+    onGuardar({
+      tipoItem: TIPO_ITEM.COMBO,
+      comboId: combo.id,
+      comboNombre: combo.nombre,
+      combo,
+      sustituciones: Object.entries(sustituciones).map(([comboSlotId, producto]) => ({
+        comboSlotId: Number(comboSlotId),
+        productoBaseNuevoId: producto.id,
+      })),
+      sustitucionesPorSlot: sustituciones,
+      componentesDetalle: (combo.slots ?? []).map((slot) => {
+        const reemplazo = sustituciones[slot.id]
+        const producto = reemplazo ?? slot.productoBaseDefault
+        return {
+          id: producto.id,
+          nombre: producto.nombre,
+          precioUnitario: producto.precioUnitario,
+          comboSlotId: slot.id,
+          esSustitucion: Boolean(reemplazo),
+          productoOriginalNombre: reemplazo ? slot.productoBaseDefault?.nombre : null,
+        }
+      }),
+    })
   }
 
   return (
     <Sheet open={abierto} onOpenChange={onOpenChange}>
       <SheetPantalla
-        titulo={combo ? combo.nombre : 'Combos'}
-        subtitulo={combo ? 'Toca un palito para cambiarlo' : 'Elige el combo'}
-        onVolver={combo ? () => setCombo(null) : undefined}
+        titulo={combo?.nombre ?? 'Cambiar mixto'}
+        subtitulo="Toca un palito para cambiarlo"
+        onVolver={() => onOpenChange(false)}
         pie={
           combo ? (
-            <Button tamano="grande" className="w-full" disabled={guardando} onClick={agregar}>
-              {guardando ? 'Agregando...' : `Agregar — ${formatoMoneda(total)}`}
+            <Button tamano="grande" className="w-full" disabled={guardando || !combo} onClick={guardar}>
+              {guardando ? 'Guardando...' : `Listo — ${formatoMoneda(total)}`}
             </Button>
           ) : null
         }
       >
-        {cargando ? (
+        {cargando || !combo ? (
           <EstadoCarga filas={3} />
-        ) : !combo ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {combos.map((opcion) => (
-              <div key={opcion.id} className="flex flex-col gap-2">
-                <BotonGrande
-                  etiqueta={opcion.nombre}
-                  detalle={`${opcion.slots?.length ?? 0} palitos · toca para cambiar`}
-                  monto={formatoMoneda(opcion.precioBase)}
-                  className="min-h-20"
-                  onClick={() => setCombo(opcion)}
-                />
-                <Button
-                  variante="secundaria"
-                  tamano="grande"
-                  className="w-full"
-                  disabled={guardando}
-                  onClick={() =>
-                    onAgregar([
-                      {
-                        tipoItem: TIPO_ITEM.COMBO,
-                        comboId: opcion.id,
-                        sustituciones: [],
-                        cantidad: 1,
-                        paraLlevar: false,
-                      },
-                    ])
-                  }
-                >
-                  {guardando ? 'Agregando...' : `Agregar tal cual — ${formatoMoneda(opcion.precioBase)}`}
-                </Button>
-              </div>
-            ))}
-          </div>
         ) : (
           <ul className="flex flex-col gap-3">
             {combo.slots.map((slot) => {
@@ -178,7 +176,8 @@ export function ArmadorCombo({ abierto, onOpenChange, onAgregar, guardando, comb
                           monto={diferencia > 0 ? `+${formatoMoneda(diferencia)}` : 'S/ 0.00'}
                           seleccionado={
                             sustituciones[slotEnEdicion.id]?.id === producto.id ||
-                            slotEnEdicion.productoBaseDefault.id === producto.id
+                            (!sustituciones[slotEnEdicion.id] &&
+                              slotEnEdicion.productoBaseDefault.id === producto.id)
                           }
                           onClick={() => elegirReemplazo(slotEnEdicion, producto)}
                         />

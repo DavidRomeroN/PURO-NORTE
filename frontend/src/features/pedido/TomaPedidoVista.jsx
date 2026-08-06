@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { MessageCircle, Minus, Plus, X } from 'lucide-react'
+import { MessageCircle, Minus, Plus, RefreshCw, X } from 'lucide-react'
 import { Sheet, SheetPantalla } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,7 @@ import { useCatalogo } from '@/hooks/useCatalogo'
 import { calcularPrecioAnticucho, calcularPrecioCombo } from '@/hooks/useCalculoPrecio'
 import { formatoMoneda } from '@/utils/formatoMoneda'
 import { claveAgrupacion } from '@/utils/agruparItems'
+import { descripcionCocina } from '@/utils/descripcionCocina'
 import { TIPO_ITEM } from '@/utils/constantes'
 import { cn } from '@/utils/cn'
 
@@ -34,6 +35,7 @@ function claveLinea(linea) {
       productoNombre: c.nombre,
       comboSlotId: c.comboSlotId,
       esSustitucion: c.esSustitucion,
+      productoOriginalNombre: c.productoOriginalNombre,
     })),
   })
 }
@@ -59,7 +61,8 @@ export function TomaPedidoVista({ abierto, onOpenChange, onEnviar, enviando }) {
   const [canasta, setCanasta] = useState([])
   const [notaLineaId, setNotaLineaId] = useState(null)
   const [textoNota, setTextoNota] = useState('')
-  const [comboAbierto, setComboAbierto] = useState(null)
+  /** Línea de canasta cuyo mixto se está editando (Cambiar). */
+  const [editandoComboId, setEditandoComboId] = useState(null)
 
   const sticksNecesarios = MODOS.find((m) => m.id === modo)?.sticks ?? 0
 
@@ -74,6 +77,10 @@ export function TomaPedidoVista({ abierto, onOpenChange, onEnviar, enviando }) {
 
   function agregarACanasta(lineaNueva) {
     setCanasta((prev) => {
+      // Los mixtos van en filas aparte: cada uno se puede "Cambiar" por su cuenta.
+      if (lineaNueva.tipoItem === TIPO_ITEM.COMBO) {
+        return [...prev, { ...lineaNueva, idLocal: `${Date.now()}-${Math.random()}` }]
+      }
       const clave = claveLinea(lineaNueva)
       const idx = prev.findIndex((l) => claveLinea(l) === clave && !l.observaciones)
       if (idx >= 0 && !lineaNueva.observaciones) {
@@ -122,6 +129,31 @@ export function TomaPedidoVista({ abierto, onOpenChange, onEnviar, enviando }) {
       observaciones: null,
     })
   }
+
+  /** Un toque en el mixto: va tal cual a la canasta. Los cambios se hacen después. */
+  function tocarCombo(combo) {
+    agregarACanasta({
+      tipoItem: TIPO_ITEM.COMBO,
+      comboId: combo.id,
+      comboNombre: combo.nombre,
+      combo,
+      cantidad: 1,
+      componentes: [],
+      componentesDetalle: (combo.slots ?? []).map((slot) => ({
+        id: slot.productoBaseDefault.id,
+        nombre: slot.productoBaseDefault.nombre,
+        precioUnitario: slot.productoBaseDefault.precioUnitario,
+        comboSlotId: slot.id,
+        esSustitucion: false,
+      })),
+      sustituciones: [],
+      sustitucionesPorSlot: {},
+      paraLlevar: false,
+      observaciones: null,
+    })
+  }
+
+  const lineaEditandoCombo = canasta.find((l) => l.idLocal === editandoComboId) ?? null
 
   function cambiarCantidad(idLocal, delta) {
     setCanasta((prev) =>
@@ -253,8 +285,8 @@ export function TomaPedidoVista({ abierto, onOpenChange, onEnviar, enviando }) {
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => setComboAbierto(c)}
-                        className="min-h-16 rounded-app border-2 border-borde bg-superficie px-4 py-3 text-left"
+                        onClick={() => tocarCombo(c)}
+                        className="min-h-16 rounded-app border-2 border-borde bg-superficie px-4 py-3 text-left active:bg-brasa-50"
                       >
                         <p className="text-lg font-extrabold">{c.nombre}</p>
                         <p className="monto text-tinta">{formatoMoneda(c.precioBase)}</p>
@@ -301,46 +333,72 @@ export function TomaPedidoVista({ abierto, onOpenChange, onEnviar, enviando }) {
                 {canasta.length === 0 ? (
                   <p className="text-sm text-tinta">Toca un producto para agregar</p>
                 ) : (
-                  <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto">
-                    {canasta.map((l) => (
-                      <li key={l.idLocal} className="flex items-start gap-2">
-                        <div className="min-w-0 grow">
-                          <p className="truncate font-bold text-carbon">
-                            {l.tipoItem === TIPO_ITEM.COMBO
-                              ? l.comboNombre
-                              : (l.componentesDetalle ?? []).map((c) => c.nombre).join(' + ')}
-                          </p>
-                          {l.observaciones ? (
-                            <p className="text-xs text-tinta">{l.observaciones}</p>
-                          ) : null}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            className="flex size-12 items-center justify-center rounded-app bg-superficie"
-                            onClick={() => cambiarCantidad(l.idLocal, -1)}
-                          >
-                            <Minus size={20} />
-                          </button>
-                          <span className="monto w-6 text-center text-lg font-extrabold">{l.cantidad}</span>
-                          <button
-                            type="button"
-                            className="flex size-12 items-center justify-center rounded-app bg-superficie"
-                            onClick={() => cambiarCantidad(l.idLocal, 1)}
-                          >
-                            <Plus size={20} />
-                          </button>
-                          <button
-                            type="button"
-                            className="flex size-12 items-center justify-center rounded-app bg-superficie"
-                            onClick={() => abrirNota(l)}
-                            aria-label="Comentario"
-                          >
-                            <MessageCircle size={20} />
-                          </button>
-                        </div>
-                      </li>
-                    ))}
+                  <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+                    {canasta.map((l) => {
+                      const etiqueta =
+                        l.tipoItem === TIPO_ITEM.COMBO || l.tipoItem === TIPO_ITEM.ANTICUCHO
+                          ? descripcionCocina({
+                              tipoItem: l.tipoItem,
+                              comboNombre: l.comboNombre,
+                              componentes: (l.componentesDetalle ?? []).map((c) => ({
+                                productoBaseId: c.id,
+                                productoNombre: c.nombre,
+                                comboSlotId: c.comboSlotId,
+                                esSustitucion: c.esSustitucion,
+                                productoOriginalNombre: c.productoOriginalNombre,
+                              })),
+                            })
+                          : (l.componentesDetalle ?? []).map((c) => c.nombre).join(' + ')
+                      return (
+                        <li key={l.idLocal} className="flex items-start gap-1.5">
+                          <div className="min-w-0 grow">
+                            <p className="font-bold leading-tight text-carbon">{etiqueta}</p>
+                            {l.observaciones ? (
+                              <p className="text-xs text-tinta">{l.observaciones}</p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            {l.tipoItem === TIPO_ITEM.COMBO ? (
+                              <button
+                                type="button"
+                                className="flex min-h-12 items-center gap-1 rounded-app bg-brasa-50 px-2 text-sm font-bold text-brasa-700"
+                                onClick={() => setEditandoComboId(l.idLocal)}
+                              >
+                                <RefreshCw size={16} />
+                                Cambiar
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="flex size-12 items-center justify-center rounded-app bg-superficie"
+                              onClick={() => cambiarCantidad(l.idLocal, -1)}
+                              aria-label="Menos uno"
+                            >
+                              <Minus size={20} />
+                            </button>
+                            <span className="monto w-6 text-center text-lg font-extrabold">
+                              {l.cantidad}
+                            </span>
+                            <button
+                              type="button"
+                              className="flex size-12 items-center justify-center rounded-app bg-superficie"
+                              onClick={() => cambiarCantidad(l.idLocal, 1)}
+                              aria-label="Más uno"
+                            >
+                              <Plus size={20} />
+                            </button>
+                            <button
+                              type="button"
+                              className="flex size-12 items-center justify-center rounded-app bg-superficie"
+                              onClick={() => abrirNota(l)}
+                              aria-label="Comentario"
+                            >
+                              <MessageCircle size={20} />
+                            </button>
+                          </div>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
 
@@ -393,30 +451,28 @@ export function TomaPedidoVista({ abierto, onOpenChange, onEnviar, enviando }) {
       ) : null}
 
       <ArmadorCombo
-        abierto={Boolean(comboAbierto)}
-        combo={comboAbierto}
-        onOpenChange={(o) => !o && setComboAbierto(null)}
+        abierto={Boolean(lineaEditandoCombo)}
+        comboInicial={lineaEditandoCombo?.combo ?? null}
+        sustitucionesIniciales={lineaEditandoCombo?.sustitucionesPorSlot ?? {}}
+        onOpenChange={(o) => !o && setEditandoComboId(null)}
         guardando={false}
-        onAgregar={(items) => {
-          for (const item of items) {
-            const combo = comboAbierto
-            agregarACanasta({
-              tipoItem: TIPO_ITEM.COMBO,
-              comboId: item.comboId ?? combo?.id,
-              comboNombre: combo?.nombre,
-              combo,
-              cantidad: item.cantidad ?? 1,
-              componentes: item.componentes ?? [],
-              componentesDetalle: [],
-              sustituciones: item.sustituciones,
-              sustitucionesPorSlot: Object.fromEntries(
-                (item.sustituciones ?? []).map((s) => [s.comboSlotId, s.productoBaseNuevoId]),
-              ),
-              paraLlevar: Boolean(item.paraLlevar),
-              observaciones: item.observaciones ?? null,
-            })
-          }
-          setComboAbierto(null)
+        onGuardar={(editado) => {
+          setCanasta((prev) =>
+            prev.map((l) =>
+              l.idLocal === editandoComboId
+                ? {
+                    ...l,
+                    comboNombre: editado.comboNombre,
+                    combo: editado.combo,
+                    comboId: editado.comboId,
+                    componentesDetalle: editado.componentesDetalle,
+                    sustituciones: editado.sustituciones,
+                    sustitucionesPorSlot: editado.sustitucionesPorSlot,
+                  }
+                : l,
+            ),
+          )
+          setEditandoComboId(null)
         }}
       />
     </>

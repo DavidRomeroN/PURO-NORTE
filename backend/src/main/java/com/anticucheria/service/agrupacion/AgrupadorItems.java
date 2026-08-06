@@ -84,35 +84,108 @@ public class AgrupadorItems {
         return tipo.name() + "|" + componentes + "|" + obsClave + "|" + llevar;
     }
 
-    private String descripcionDe(PedidoItemResponse item) {
+    String descripcionDe(PedidoItemResponse item) {
         if (item.getTipoItem() == TipoItem.COMBO) {
-            String nombre = item.getComboNombre() != null ? item.getComboNombre() : "Combo";
-            String palitos = nombresComponentes(item);
-            return palitos.isEmpty() ? nombre : nombre + " · " + palitos;
+            return descripcionCombo(item);
         }
         if (item.getComponentes() == null || item.getComponentes().isEmpty()) {
             return item.getTipoItem().name();
         }
-        String nombres = nombresComponentes(item);
         if (item.getTipoItem() == TipoItem.ANTICUCHO) {
-            return item.getComponentes().size() == 1
-                    ? "Anticucho de " + nombres.toLowerCase(Locale.ROOT)
-                    : nombres;
+            return descripcionAnticucho(item);
         }
-        return nombres;
+        return nombresComponentes(item);
     }
 
-    private static String nombresComponentes(PedidoItemResponse item) {
-        if (item.getComponentes() == null || item.getComponentes().isEmpty()) {
-            return "";
+    private static String descripcionAnticucho(PedidoItemResponse item) {
+        // Orden de armado (como los eligió el mozo), no por id.
+        List<String> nombres = item.getComponentes() == null
+                ? List.of()
+                : item.getComponentes().stream()
+                        .map(ComponenteResponse::getProductoNombre)
+                        .filter(Objects::nonNull)
+                        .toList();
+        if (nombres.isEmpty()) {
+            return "Anticucho";
+        }
+        if (nombres.size() == 1) {
+            return "Anticucho de " + lower(nombres.get(0));
+        }
+        if (nombres.size() == 2) {
+            return "doble de " + conY(nombres);
+        }
+        if (nombres.size() == 3) {
+            return "triple de " + conY(nombres);
+        }
+        return nombres.size() + " palos de " + conY(nombres);
+    }
+
+    private static String descripcionCombo(PedidoItemResponse item) {
+        String nombre = item.getComboNombre() != null ? item.getComboNombre() : "Mixto";
+        List<ComponenteResponse> comps = componentesOrdenados(item);
+        List<ComponenteResponse> cambios = comps.stream()
+                .filter(c -> Boolean.TRUE.equals(c.getEsSustitucion()))
+                .toList();
+
+        if (cambios.size() == 1) {
+            ComponenteResponse cambio = cambios.get(0);
+            String nuevo = lower(cambio.getProductoNombre());
+            String original = lower(cambio.getProductoOriginalNombre());
+            if (!nuevo.isEmpty() && !original.isEmpty()) {
+                String base = nombre.toLowerCase(Locale.ROOT).contains("especial")
+                        ? "mixto especial"
+                        : "mixto";
+                return base + " " + nuevo + " por " + original;
+            }
+        }
+
+        if (cambios.size() >= 2) {
+            String palitos = nombresComponentes(item);
+            return palitos.isEmpty() ? nombre : nombre + " · " + palitos;
+        }
+
+        return nombre;
+    }
+
+    private static List<ComponenteResponse> componentesOrdenados(PedidoItemResponse item) {
+        if (item.getComponentes() == null) {
+            return List.of();
         }
         return item.getComponentes().stream()
                 .sorted(Comparator
                         .comparing((ComponenteResponse c) -> c.getComboSlotId() == null ? 0L : c.getComboSlotId())
                         .thenComparing(c -> c.getProductoBaseId() == null ? 0L : c.getProductoBaseId()))
+                .toList();
+    }
+
+    private static List<String> listaNombres(PedidoItemResponse item) {
+        return componentesOrdenados(item).stream()
                 .map(ComponenteResponse::getProductoNombre)
                 .filter(Objects::nonNull)
-                .collect(Collectors.joining(" + "));
+                .toList();
+    }
+
+    private static String nombresComponentes(PedidoItemResponse item) {
+        return String.join(" + ", listaNombres(item));
+    }
+
+    private static String conY(List<String> nombres) {
+        List<String> limpios = nombres.stream().map(AgrupadorItems::lower).filter(s -> !s.isEmpty()).toList();
+        if (limpios.isEmpty()) {
+            return "";
+        }
+        if (limpios.size() == 1) {
+            return limpios.get(0);
+        }
+        if (limpios.size() == 2) {
+            return limpios.get(0) + " y " + limpios.get(1);
+        }
+        return String.join(", ", limpios.subList(0, limpios.size() - 1))
+                + " y " + limpios.get(limpios.size() - 1);
+    }
+
+    private static String lower(String nombre) {
+        return nombre == null ? "" : nombre.toLowerCase(Locale.ROOT);
     }
 
     private static String normalizarObs(String obs) {
