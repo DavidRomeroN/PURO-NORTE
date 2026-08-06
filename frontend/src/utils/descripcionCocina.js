@@ -35,7 +35,7 @@ function descripcionAnticucho(item) {
 }
 
 /**
- * Mixto: 1 cambio → "mixto corazón por carne";
+ * Mixto: 1 cambio → "mixto pollo por carne" (lo que quitaron por lo que pusieron);
  * 2+ cambios → listar los palitos; sin cambios → solo el nombre.
  */
 function descripcionCombo(item) {
@@ -49,7 +49,7 @@ function descripcionCombo(item) {
     const original = lower(cambio.productoOriginalNombre)
     if (nuevo && original) {
       const base = /especial/i.test(nombre) ? 'mixto especial' : 'mixto'
-      return `${base} ${nuevo} por ${original}`
+      return `${base} ${original} por ${nuevo}`
     }
   }
 

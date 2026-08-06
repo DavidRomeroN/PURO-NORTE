@@ -132,10 +132,11 @@ public class AgrupadorItems {
             String nuevo = lower(cambio.getProductoNombre());
             String original = lower(cambio.getProductoOriginalNombre());
             if (!nuevo.isEmpty() && !original.isEmpty()) {
+                // "pollo por carne" = quitaron pollo, pusieron carne.
                 String base = nombre.toLowerCase(Locale.ROOT).contains("especial")
                         ? "mixto especial"
                         : "mixto";
-                return base + " " + nuevo + " por " + original;
+                return base + " " + original + " por " + nuevo;
             }
         }
 

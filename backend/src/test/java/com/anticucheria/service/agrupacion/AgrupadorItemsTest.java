@@ -127,7 +127,7 @@ class AgrupadorItemsTest {
 
         var lineas = agrupador.agrupar(List.of(mixto));
         assertThat(lineas).hasSize(1);
-        assertThat(lineas.get(0).getDescripcion()).isEqualTo("mixto corazón por carne");
+        assertThat(lineas.get(0).getDescripcion()).isEqualTo("mixto carne por corazón");
     }
 
     @Test
